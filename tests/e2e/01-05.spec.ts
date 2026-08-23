@@ -22,7 +22,7 @@ test.describe('02 · open workspace', () => {
       });
     }, dir);
     await page.reload();
-    await expect(page.getByText('Explorer')).toBeVisible();
+    await expect(page.getByText('Explorer', { exact: true })).toBeVisible();
     await expect(page.getByText('main.tex').first()).toBeVisible();
   });
 

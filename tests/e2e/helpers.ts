@@ -39,6 +39,16 @@ export async function openFile(page: import('@playwright/test').Page, fileName: 
 
 export async function build(page: import('@playwright/test').Page) {
   await page.keyboard.press('Control+b');
+  // Guard against the hotkey racing React's listener attachment right after
+  // a reload: if the status line is still idle, fall back to the button.
+  await page.waitForTimeout(400);
+  const stillIdle = await page
+    .getByText('● Ready')
+    .isVisible()
+    .catch(() => false);
+  if (stillIdle) {
+    await page.getByRole('button', { name: /Build/ }).click();
+  }
 }
 
 /** Instance-session token for out-of-browser API calls (see server security.ts). */
