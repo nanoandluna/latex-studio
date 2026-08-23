@@ -104,6 +104,16 @@ READY FOR V0.1.0
 
 Rules of the gate: without `RUN_LATEX_TESTS=1` real-compilation tests SKIP quietly (normal dev); **with** it, a missing TeX environment is a hard `BLOCKED` failure — a skip can never masquerade as a pass. Real build assertions check true artifacts: PDF exists, size > 0, header `%PDF-`, and a failed rebuild serves no PDF.
 
+## Security
+
+The server binds to 127.0.0.1 only and protects its API against localhost
+CSRF / DNS-rebinding:
+
+- **CORS** never reflects foreign origins (only same-origin + the Vite dev server may read responses).
+- **Host allow-list** rejects DNS-rebinding requests (Host must be localhost / 127.0.0.1 / [::1] / this machine's hostname).
+- **Instance token** — every browser page load receives an HttpOnly SameSite=Strict session cookie; all /api/* calls require it (or the x-latex-studio-token header). Automated tests run with NODE_ENV=test, which opts out of this layer.
+
+Error shape is unchanged: { "error": { "code", "message" } } with new codes UNAUTHORIZED (401) / FORBIDDEN (403).
 ## Requirements
 
 - Node.js ≥ 20 and pnpm ≥ 9

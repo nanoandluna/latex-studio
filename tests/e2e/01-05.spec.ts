@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
-import { BASE, FIXTURES, tempFixture, openWorkspaceViaApi, openFile, build, hasLatex } from './helpers';
+import { BASE, FIXTURES, tempFixture, openWorkspaceViaApi, openFile, build, hasLatex, apiToken } from './helpers';
 
 test.describe('01 · app loads', () => {
   test('title + core regions render', async ({ page }) => {
@@ -27,8 +27,10 @@ test.describe('02 · open workspace', () => {
   });
 
   test('rejects an invalid directory with a structured error', async ({ request }) => {
+    const token = await apiToken();
     const res = await request.post('/api/workspace/open', {
       data: { path: 'Z:/definitely/not/there' },
+      headers: { 'x-latex-studio-token': token },
     });
     expect(res.status()).toBe(400);
     const body = await res.json();

@@ -41,13 +41,22 @@ export async function build(page: import('@playwright/test').Page) {
   await page.keyboard.press('Control+b');
 }
 
+/** Instance-session token for out-of-browser API calls (see server security.ts). */
+export async function apiToken(): Promise<string> {
+  const res = await fetch(`${BASE}/api/auth/token`);
+  if (!res.ok) throw new Error(`token bootstrap failed: ${res.status}`);
+  return ((await res.json()) as { token: string }).token;
+}
+
 /**
  * Whether a real LaTeX compiler is available for this run.
  * Real-build specs skip loudly when it is not.
  */
 export async function hasLatex(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/api/env`);
+    const res = await fetch(`${BASE}/api/env`, {
+      headers: { 'x-latex-studio-token': await apiToken() },
+    });
     const env = (await res.json()) as { anyAvailable: boolean };
     return !!env.anyAvailable;
   } catch {

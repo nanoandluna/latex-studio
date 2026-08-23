@@ -5,11 +5,19 @@ import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PORT } from './config.js';
 import { toErrorPayload } from './errors.js';
+import { createInstanceToken, registerSecurity } from './security.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerEnvRoutes } from './routes/env.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { registerFileRoutes } from './routes/files.js';
 import { registerBuildRoutes } from './routes/build.js';
+
+/** Origins allowed to read API responses cross-origin (dev server only). */
+const DEV_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
 
 export async function createApp() {
   const app = Fastify({
@@ -17,13 +25,28 @@ export async function createApp() {
     bodyLimit: 20 * 1024 * 1024,
   });
 
-  await app.register(cors, { origin: true });
+  const isTest = process.env.NODE_ENV === 'test';
+  const instanceToken = createInstanceToken();
+
+  // CORS: never reflect arbitrary origins.
+  //  - no Origin header (curl / same-origin fetch) → no ACAO needed
+  //  - production serves the UI same-origin → no ACAO needed
+  //  - only the Vite dev server may read responses cross-origin
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      if (!origin || DEV_ORIGINS.has(origin)) return cb(null, true);
+      return cb(null, false);
+    },
+  });
+
+  registerSecurity(app, { enforceAuth: !isTest, token: instanceToken });
 
   app.setErrorHandler((err, _req, reply) => {
     const payload = toErrorPayload(err);
     reply.code(payload.statusCode).send({ error: payload.error });
   });
 
+  await registerAuthRoutes(app, instanceToken);
   await registerHealthRoutes(app);
   await registerEnvRoutes(app);
   await registerWorkspaceRoutes(app);

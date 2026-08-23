@@ -11,11 +11,41 @@ export interface ApiErrorShape {
   message: string;
 }
 
+// ---- instance-session bootstrap -------------------------------------------
+// The server issues a per-process random token. Same-origin page loads also
+// receive it as an HttpOnly cookie; the header path below covers the Vite dev
+// proxy. Cross-origin pages can obtain neither (locked CORS + Host allow-list).
+let instanceToken: string | null = null;
+let tokenPromise: Promise<string | null> | null = null;
+
+function fetchInstanceToken(): Promise<string | null> {
+  if (!tokenPromise) {
+    tokenPromise = fetch('/api/auth/token')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { token?: string } | null) => {
+        instanceToken = j?.token ?? null;
+        return instanceToken;
+      })
+      .catch(() => null);
+  }
+  return tokenPromise;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
-    ...init,
-  });
+  await fetchInstanceToken();
+  const headers: Record<string, string> = {
+    ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(instanceToken ? { 'x-latex-studio-token': instanceToken } : {}),
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
+  let res = await fetch(url, { ...init, headers });
+  // Session expired (server restarted → new token): re-bootstrap once.
+  if (res.status === 401) {
+    tokenPromise = null;
+    instanceToken = null;
+    await fetchInstanceToken();
+    res = await fetch(url, { ...init, headers });
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = body as Partial<{ error: ApiErrorShape }> & Partial<ApiErrorShape>;
