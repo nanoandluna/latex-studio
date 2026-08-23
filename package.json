@@ -1,0 +1,25 @@
+{
+  "name": "latex-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A lightweight local LaTeX workspace: edit, compile, preview PDF in the browser.",
+  "scripts": {
+    "dev": "pnpm --filter @latex-studio/shared build && pnpm --filter @latex-studio/latex-parser build && concurrently -n server,web -c blue,magenta \"pnpm --filter @latex-studio/server dev\" \"pnpm --filter @latex-studio/web dev\"",
+    "build": "pnpm --filter @latex-studio/shared build && pnpm --filter @latex-studio/latex-parser build && pnpm --filter @latex-studio/web build && pnpm --filter @latex-studio/server build",
+    "start": "pnpm --filter @latex-studio/server start",
+    "doctor": "node scripts/doctor.mjs",
+    "test": "pnpm -r test",
+    "test:latex": "node scripts/run-with-env.mjs RUN_LATEX_TESTS=1 -- pnpm --filter @latex-studio/server test",
+    "test:e2e": "pnpm --filter @latex-studio/shared build && pnpm --filter @latex-studio/latex-parser build && pnpm --filter @latex-studio/web build && pnpm --filter @latex-studio/server build && playwright test -c tests/playwright.config.ts",
+    "test:e2e:latex": "pnpm --filter @latex-studio/shared build && pnpm --filter @latex-studio/latex-parser build && pnpm --filter @latex-studio/web build && pnpm --filter @latex-studio/server build && node scripts/run-with-env.mjs E2E_HAS_LATEX=1 -- playwright test -c tests/playwright.config.ts",
+    "release:check": "node scripts/release-check.mjs",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

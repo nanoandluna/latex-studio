@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\title{Multi-File Project Test}
+\author{LaTeX Studio}
+\begin{document}
+\maketitle
+
+\input{sections/intro}
+
+\include{sections/method}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.5\textwidth]{figures/figure.png}
+  \caption{A generated test figure}\label{fig:demo}
+\end{figure}
+
+See Figure~\ref{fig:demo}.
+
+\end{document}
