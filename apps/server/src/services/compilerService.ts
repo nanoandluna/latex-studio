@@ -3,6 +3,7 @@ import type { BuildOptions, BuildRecord } from '@latex-studio/shared';
 import { BuildManager, type BuildContext } from '../compiler/buildManager.js';
 import { ArtifactManager, LogCollector } from '../compiler/artifactManager.js';
 import { BUILD_DIR_NAME, BUILD_TIMEOUT_MS } from '../compiler/config.js';
+import { ApiError } from '../errors.js';
 
 export { BUILD_DIR_NAME, BUILD_TIMEOUT_MS };
 
@@ -44,8 +45,10 @@ export class CompilerService {
 
   async getPdfPath(buildId: string): Promise<string> {
     const rec = this.manager.getBuild(buildId);
-    if (!rec) throw new Error(`Unknown build ${buildId}`);
-    if (!rec.pdfAvailable) throw new Error('PDF not available for this build');
+    if (!rec) throw new ApiError('FILE_NOT_FOUND', `Unknown build: ${buildId}`);
+    if (!rec.pdfAvailable) {
+      throw new ApiError('BUILD_FAILED', 'PDF not available for this build');
+    }
     const artifacts = new ArtifactManager(path.join(rec.workspacePath, BUILD_DIR_NAME));
     return artifacts.pdfPath(rec.mainFile);
   }

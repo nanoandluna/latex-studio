@@ -89,10 +89,10 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
         .header('Cache-Control', 'no-store')
         .send(buf);
     } catch (err) {
-      const code = (err as Error).message?.includes('not available')
-        ? 'BUILD_FAILED'
-        : 'FILE_NOT_FOUND';
-      return sendError(reply, new ApiError(code as never, (err as Error).message));
+      // getPdfPath throws typed ApiError (FILE_NOT_FOUND / BUILD_FAILED);
+      // fs failures fall through to the generic FILE_NOT_FOUND branch of
+      // toErrorPayload — no paths are echoed either way.
+      return sendError(reply, err);
     }
   });
 
@@ -114,13 +114,14 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, new ApiError('BUILD_FAILED', 'No successful build available for SyncTeX'));
     }
     try {
+      // Validate first, then pass the RESOLVED path downstream — never the
+      // raw client-supplied string.
       const abs = safeResolve(root, body.file);
-      void abs;
       const result = await synctex.forwardSearch(
         root,
         path.join(root, BUILD_DIR_NAME),
         rec.mainFile,
-        body.file,
+        abs,
         body.line,
         body.column ?? 0
       );

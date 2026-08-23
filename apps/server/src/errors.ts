@@ -42,10 +42,14 @@ export function toErrorPayload(err: unknown): {
   }
   const e = err as Error & { statusCode?: number; code?: string };
   if (e?.code === 'ENOENT') {
-    return { error: { code: 'FILE_NOT_FOUND', message: e.message }, statusCode: 404 };
+    // Do not echo filesystem paths to clients.
+    return { error: { code: 'FILE_NOT_FOUND', message: 'File not found' }, statusCode: 404 };
   }
+  // Unknown/internal errors: log the details server-side, return a generic
+  // message so internal paths or stack details never reach the client.
+  console.error('[latex-studio] unhandled error:', e ?? err);
   return {
-    error: { code: 'INTERNAL_ERROR', message: e?.message ?? String(err) },
+    error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
     statusCode: e?.statusCode ?? 500,
   };
 }
