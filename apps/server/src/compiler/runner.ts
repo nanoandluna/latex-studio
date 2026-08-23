@@ -264,7 +264,6 @@ export class CompilerRunner {
         workspace,
         opts
       );
-      void mainFile;
       return { ran: true, skipped: false, ok: res.success };
     }
     return { ran: false, skipped: true, ok: true };

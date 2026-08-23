@@ -42,7 +42,7 @@ export function MonacoPane() {
     clearReveal();
   }, [revealTarget, activePath, clearReveal]);
 
-  const handleMount: OnMount = (editor, monaco) => {
+  const handleMount: OnMount = (editor) => {
     editorRef.current = editor;
     editor.onDidChangeCursorPosition((e) => {
       if (activePath) setCursorLine(activePath, e.position.lineNumber);
@@ -66,7 +66,6 @@ export function MonacoPane() {
         /* synctex unavailable — ignore */
       }
     });
-    void monaco;
   };
 
   if (!tab) {
