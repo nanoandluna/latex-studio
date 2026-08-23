@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { authedFetch } from '../../api/client';
 import { usePreviewStore } from '../../stores/previewStore';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -68,7 +69,7 @@ export function PdfPreview() {
     setCurrentMatch(0);
     (async () => {
       try {
-        const buf = await fetch(pdfUrl).then(async (r) => {
+        const buf = await authedFetch(pdfUrl).then(async (r) => {
           if (!r.ok) {
             const body = await r.json().catch(() => ({}));
             throw new Error(body?.error?.message ?? `${r.status}`);

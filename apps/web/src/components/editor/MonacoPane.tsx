@@ -2,6 +2,7 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 import * as monacoNs from 'monaco-editor';
 import { loader } from '@monaco-editor/react';
+import { authedFetch } from '../../api/client';
 import { useEditorStore } from '../../stores/editorStore';
 import { useBuildStore } from '../../stores/buildStore';
 import { usePreviewStore } from '../../stores/previewStore';
@@ -54,7 +55,7 @@ export function MonacoPane() {
       if (!line || !activePath) return;
       try {
         const buildId = useBuildStore.getState().buildId;
-        const res = await fetch('/api/synctex/forward', {
+        const res = await authedFetch('/api/synctex/forward', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ buildId, file: activePath, line }),

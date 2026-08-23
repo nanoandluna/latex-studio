@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { FileNode } from '@latex-studio/shared';
-import { api } from '../api/client';
+import { api, authedFetch } from '../api/client';
 import { useBuildStore } from './buildStore';
 import { usePreviewStore } from './previewStore';
 import { useEditorStore } from './editorStore';
@@ -80,7 +80,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       detectMainFile: async () => {
-        const res = await fetch('/api/workspace/mainfile').then((r) => r.json());
+        const res = await authedFetch('/api/workspace/mainfile').then((r) => r.json());
         return res.mainFile ?? null;
       },
 

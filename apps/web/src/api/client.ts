@@ -31,21 +31,35 @@ function fetchInstanceToken(): Promise<string | null> {
   return tokenPromise;
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+/**
+ * Fetch with instance-session auth attached.
+ *
+ * Shared by request() and any caller that needs the raw Response (PDF blobs,
+ * ad-hoc endpoints). Reuses the single token bootstrap; retries once with a
+ * fresh token when the server session has expired (401).
+ */
+function mergeAuthHeaders(init: RequestInit | undefined, token: string | null): Record<string, string> {
+  const out: Record<string, string> = { ...((init?.headers as Record<string, string>) ?? {}) };
+  if (init?.body && !out['Content-Type']) out['Content-Type'] = 'application/json';
+  if (token) out['x-latex-studio-token'] = token;
+  return out;
+}
+
+export async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
   await fetchInstanceToken();
-  const headers: Record<string, string> = {
-    ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-    ...(instanceToken ? { 'x-latex-studio-token': instanceToken } : {}),
-    ...((init?.headers as Record<string, string>) ?? {}),
-  };
-  let res = await fetch(url, { ...init, headers });
+  let res = await fetch(url, { ...init, headers: mergeAuthHeaders(init, instanceToken) });
   // Session expired (server restarted → new token): re-bootstrap once.
   if (res.status === 401) {
     tokenPromise = null;
     instanceToken = null;
     await fetchInstanceToken();
-    res = await fetch(url, { ...init, headers });
+    res = await fetch(url, { ...init, headers: mergeAuthHeaders(init, instanceToken) });
   }
+  return res;
+}
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await authedFetch(url, init);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = body as Partial<{ error: ApiErrorShape }> & Partial<ApiErrorShape>;

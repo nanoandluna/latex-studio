@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { BuildRecord, Problem } from '@latex-studio/shared';
-import { api } from '../api/client';
+import { api, authedFetch } from '../api/client';
 import { useWorkspaceStore } from './workspaceStore';
 import { useSettingsStore } from './settingsStore';
 import { usePreviewStore } from './previewStore';
@@ -87,7 +87,7 @@ export const useBuildStore = create<BuildState>()((set, get) => ({
 
   refreshLatest: async () => {
     try {
-      const res = await fetch('/api/build/latest').then((r) => r.json());
+      const res = await authedFetch('/api/build/latest').then((r) => r.json());
       // Never surface a build that belongs to another workspace (e.g. a
       // record left over from before a workspace switch).
       const wsPath = useWorkspaceStore.getState().path;
