@@ -36,6 +36,9 @@ const ENGINES: Record<Exclude<CompilerId, 'latexmk'>, string> = {
  * and "Build C finished, then stale Build A overwrites the PDF" races).
  */
 export class BuildManager {
+  /** Bounded build history — prevents unbounded memory growth in long sessions. */
+  private static readonly MAX_BUILD_HISTORY = 20;
+
   private builds = new Map<string, BuildRecord>();
   private contexts = new Map<string, BuildContext>();
   private runner = new CompilerRunner();
@@ -102,6 +105,14 @@ export class BuildManager {
     };
     this.builds.set(buildId, record);
     this.latestId = buildId;
+    // Prune oldest records (Map preserves insertion order); the newest build
+    // is never pruned.
+    while (this.builds.size > BuildManager.MAX_BUILD_HISTORY) {
+      const oldest = this.builds.keys().next().value as string | undefined;
+      if (oldest === undefined || oldest === buildId) break;
+      this.builds.delete(oldest);
+      this.contexts.delete(oldest);
+    }
 
     const ctx: BuildContext = {
       buildId,

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { ProcessManager, type SpawnOutcome } from './processManager.js';
 import { ArtifactManager } from './artifactManager.js';
+import { BUILD_DIR_NAME } from './config.js';
 
 export interface RunStep {
   tool: string;
@@ -33,6 +34,52 @@ const RERUN_PATTERNS = [
 ];
 
 const MAX_ENGINE_PASSES = 5;
+
+/**
+ * Recursively collect the LaTeX sources reachable from the main file via
+ * \input / \include, so bibliography directives declared in sub-files are
+ * detected too. Unresolvable includes are skipped silently.
+ */
+export async function collectSources(workspace: string, mainFile: string): Promise<string> {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const walk = async (relFile: string, depth: number): Promise<void> => {
+    const key = relFile.replace(/\\/g, '/').replace(/^\.\//, '');
+    if (depth > 8 || seen.has(key)) return;
+    seen.add(key);
+    let content: string;
+    try {
+      content = await fs.readFile(path.join(workspace, relFile), 'utf8');
+    } catch {
+      return;
+    }
+    out.push(content);
+
+    const inputRe = /\\(?:input|include)\{([^}]+)\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = inputRe.exec(content)) !== null) {
+      let rel = m[1].trim().replace(/\\/g, '/');
+      if (!/\.(tex|ltx)$/i.test(rel)) rel += '.tex';
+      if (rel.includes('..') || path.isAbsolute(rel)) continue; // stay inside workspace
+      const candidates = [rel];
+      const dir = path.posix.dirname(relFile.replace(/\\/g, '/'));
+      if (dir && dir !== '.') candidates.push(path.posix.join(dir, rel));
+      for (const candidate of candidates) {
+        try {
+          await fs.access(path.join(workspace, candidate));
+          await walk(candidate, depth + 1);
+          break;
+        } catch {
+          /* try next candidate */
+        }
+      }
+    }
+  };
+
+  await walk(mainFile, 0);
+  return out.join('\n');
+}
 
 /**
  * Executes the actual compiler invocations.
@@ -83,10 +130,11 @@ export class CompilerRunner {
   ): Promise<RunResult> {
     const artifacts = new ArtifactManager(buildDir);
     const mainBase = path.basename(mainFile).replace(/\.tex$/i, '');
-    // Read the main file once for bibliography directives.
+    // Scan the main file AND every file reachable via \input/\include for
+    // bibliography directives.
     let mainSource = '';
     try {
-      mainSource = await fs.readFile(path.join(workspace, mainFile), 'utf8');
+      mainSource = await collectSources(workspace, mainFile);
     } catch {
       /* unreadable main — the engine will report it */
     }
@@ -210,7 +258,12 @@ export class CompilerRunner {
     if (cfg.usesBibtex && cfg.bibtexCmd) {
       // Run from the workspace root so \bibliography{refs} resolves relative
       // to the project, while aux/bbl live in the isolated build dir.
-      const res = await this.runTool(cfg.bibtexCmd, ['.build/' + jobname], workspace, opts);
+      const res = await this.runTool(
+        cfg.bibtexCmd,
+        [`${BUILD_DIR_NAME}/${jobname}`],
+        workspace,
+        opts
+      );
       void mainFile;
       return { ran: true, skipped: false, ok: res.success };
     }

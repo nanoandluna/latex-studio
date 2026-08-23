@@ -154,6 +154,16 @@ describe.skipIf(!RUN || availableEngines.length === 0 || !bibtex)('real build: b
 });
 if (!bibtex) console.warn(skipMessage('BibTeX'));
 
+describe.skipIf(!RUN || availableEngines.length === 0 || !bibtex)('real build: bibliography in sub-file', () => {
+  it('detects \\bibliography declared inside an \\input-ed file', async () => {
+    const ws = await tempWorkspace('multi-file-bib');
+    const rec = await manager.build(ws, { mainFile: 'main.tex', compiler: availableEngines[0] as EngineChoice });
+    if (rec.status !== 'success') failWithDiagnostics('multi-file-bib/bibtex', rec);
+    await assertValidPdf(ws, 'main.tex');
+    expect(rec.problems.filter((p) => p.message.includes('smith2025'))).toHaveLength(0);
+  }, 900_000);
+});
+
 describe.skipIf(!RUN || availableEngines.length === 0 || !biber)('real build: bibliography (biber)', () => {
   it('runs biber for biblatex projects', async () => {
     const ws = await tempWorkspace('bibliography-biber');
