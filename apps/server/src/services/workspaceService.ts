@@ -82,6 +82,11 @@ export class WorkspaceService {
   async saveFile(relPath: string, content: string): Promise<void> {
     const root = this.requireWorkspace();
     const abs = safeResolve(root, relPath);
+    // Same rule as createFile: refuse to write text content into
+    // binary-extension files.
+    if (!isTextFile(relPath) && content.length > 0) {
+      throw new ApiError('INVALID_FILE', `Refusing to write text content into binary-looking file: ${relPath}`, 400);
+    }
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, content, 'utf8');
   }
