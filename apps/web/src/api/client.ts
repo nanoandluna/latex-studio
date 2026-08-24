@@ -4,6 +4,7 @@ import type {
   BibKeyEntry,
   LabelEntry,
   LatexEnvironment,
+  ProjectIndex,
 } from '@latex-studio/shared';
 
 export interface ApiErrorShape {
@@ -96,6 +97,34 @@ export const api = {
 
   bibKeys: () => request<{ keys: BibKeyEntry[] }>('/api/workspace/bibkeys'),
   labels: () => request<{ labels: LabelEntry[] }>('/api/workspace/labels'),
+
+  // ---- Project Index (V0.2) ----
+  index: () => request<ProjectIndex>('/api/index'),
+  refreshIndex: () =>
+    request<{ filesParsed: number; cacheHits: number; durationMs: number; index: ProjectIndex }>(
+      '/api/index/refresh',
+      { method: 'POST' }
+    ),
+  updateIndexBuffer: (path: string, content: string) =>
+    request<ProjectIndex>('/api/index/update', {
+      method: 'POST',
+      body: JSON.stringify({ path, content }),
+    }),
+
+  /** Binary-safe URL for image/pdf preview (auth via session cookie). */
+  rawFileUrl: (path: string) => `/api/file/raw?path=${encodeURIComponent(path)}`,
+
+  synctexForward: (buildId: string, file: string, line: number, column = 0) =>
+    request<{ page: number; x?: number; y?: number }>(
+      `/api/build/${encodeURIComponent(buildId)}/synctex/forward`,
+      { method: 'POST', body: JSON.stringify({ file, line, column }) }
+    ),
+
+  synctexInverse: (buildId: string, page: number, x: number, y: number) =>
+    request<{ file: string; line: number; column?: number }>(
+      `/api/build/${encodeURIComponent(buildId)}/synctex/inverse`,
+      { method: 'POST', body: JSON.stringify({ page, x, y }) }
+    ),
 
   readFile: (path: string) =>
     request<{ path: string; content: string }>(

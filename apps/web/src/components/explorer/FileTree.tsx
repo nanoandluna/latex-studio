@@ -49,8 +49,7 @@ export function FileTree() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
-        <span>Explorer</span>
+      <div className="flex h-8 shrink-0 items-center justify-end px-2 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
         <div className="flex gap-1">
           <IconButton title="New file" onClick={() => handleCreate('file')} icon="+📄" />
           <IconButton title="New folder" onClick={() => handleCreate('directory')} icon="+📁" />
@@ -123,6 +122,8 @@ function LeafFile({ node, depth }: { node: FileNode; depth: number }) {
       <button
         onClick={async () => {
           if (/\.(tex|bib|txt|md|sty|cls|json)$/i.test(node.name)) await openFile(node.path);
+          // V0.2: image/pdf files open an inline preview tab
+          else if (/\.(png|jpe?g|gif|svg|pdf)$/i.test(node.name)) await openFile(node.path);
         }}
         className={`flex w-full items-center gap-1 rounded px-2 py-0.5 text-left text-xs ${
           activePath === node.path

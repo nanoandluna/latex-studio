@@ -1,9 +1,14 @@
 import { useBuildStore } from '../../stores/buildStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useUiStore } from '../../stores/uiStore';
+import { useProjectIndexStore } from '../../stores/projectIndexStore';
+import { useMemo } from 'react';
+import type { Problem } from '@latex-studio/shared';
 
 export function ProblemsPanel() {
-  const problems = useBuildStore((s) => s.problems);
+  const index = useProjectIndexStore((s) => s.index);
+  const buildProblems = useBuildStore((s) => s.problems);
+
   const log = useBuildStore((s) => s.log);
   const status = useBuildStore((s) => s.status);
   const durationMs = useBuildStore((s) => s.durationMs);
@@ -12,6 +17,21 @@ export function ProblemsPanel() {
   const bottomTab = useUiStore((s) => s.bottomTab);
   const setBottomTab = useUiStore((s) => s.setBottomTab);
 
+  // Merge compiler problems with live project-index diagnostics.
+  // NOTE: diagnostics are derived via useMemo — subscribing with an inline
+  // s.index?.diagnostics ?? [] selector allocates a fresh array per store
+  // event and causes render storms (React #185).
+  const indexDiags = useMemo(() => index?.diagnostics ?? [], [index]);
+  const problems: (Problem & { source: 'build' | 'index' })[] = [
+    ...buildProblems.map((p) => ({ ...p, source: 'build' as const })),
+    ...indexDiags.map((d) => ({
+      severity: d.severity,
+      message: d.message,
+      file: d.file,
+      line: d.line,
+      source: 'index' as const,
+    })),
+  ];
   const errors = problems.filter((p) => p.severity === 'error');
   const warnings = problems.filter((p) => p.severity === 'warning');
 
@@ -72,7 +92,7 @@ export function ProblemsPanel() {
           problems.length === 0 ? (
             <Empty>No problems detected.</Empty>
           ) : (
-            problems.map((p, i) => <ProblemRow key={i} index={i} problem={p} />)
+            problems.map((p, i) => <ProblemRow key={i} problem={p} />)
           )
         ) : (
           <pre className="h-full overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">
@@ -84,7 +104,7 @@ export function ProblemsPanel() {
   );
 }
 
-function ProblemRow({ problem }: { index: number; problem: { severity: string; message: string; file?: string; line?: number } }) {
+function ProblemRow({ problem }: { problem: { severity: string; message: string; file?: string; line?: number; source?: 'build' | 'index' } }) {
   const openFileAtLine = useEditorStore((s) => s.openFileAtLine);
   const icon = problem.severity === 'error' ? '✕' : problem.severity === 'warning' ? '⚠' : 'ℹ';
   const color =
@@ -101,6 +121,11 @@ function ProblemRow({ problem }: { index: number; problem: { severity: string; m
       <span className={`${color} w-4 shrink-0`}>{icon}</span>
       <span className="shrink-0 text-zinc-400 uppercase">{problem.severity}</span>
       <span className="truncate">{problem.message}</span>
+      {problem.source === 'index' && (
+        <span className="shrink-0 rounded bg-zinc-200 px-1 text-[10px] text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+          index
+        </span>
+      )}
       <span className="ml-auto shrink-0 pl-2 font-mono text-[11px] text-zinc-400">
         {problem.file ?? ''}
         {problem.line ? `:${problem.line}` : ''}

@@ -5,6 +5,7 @@ import { api, authedFetch } from '../api/client';
 import { useBuildStore } from './buildStore';
 import { usePreviewStore } from './previewStore';
 import { useEditorStore } from './editorStore';
+import { useProjectIndexStore } from './projectIndexStore';
 
 interface WorkspaceState {
   path: string | null;
@@ -52,6 +53,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           useBuildStore.getState().reset();
           usePreviewStore.getState().setPdf(null);
           useEditorStore.setState({ tabs: [], activePath: null, revealTarget: null, cursorLine: {} });
+          useProjectIndexStore.getState().reset();
           set({ path: opened.path, name: opened.name, mainFile: opened.mainFile });
           await get().refreshTree();
         } catch (err) {
@@ -67,6 +69,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         useBuildStore.getState().reset();
         usePreviewStore.getState().setPdf(null);
         useEditorStore.setState({ tabs: [], activePath: null, revealTarget: null, cursorLine: {} });
+        useProjectIndexStore.getState().reset();
         set({ path: null, name: null, mainFile: null, tree: null });
       },
 

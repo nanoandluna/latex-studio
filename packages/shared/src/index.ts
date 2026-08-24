@@ -120,3 +120,129 @@ export interface SyncTexForwardResult {
   x?: number;
   y?: number;
 }
+
+/** Result of a SyncTeX inverse search (PDF → source). */
+export interface SyncTexInverseResult {
+  file: string;
+  line: number;
+  column?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Project Index (V0.2) — the single source of truth consumed by Outline,
+// Navigator, IntelliSense and index-level diagnostics.
+// ---------------------------------------------------------------------------
+
+export interface SectionEntry {
+  /** display title, e.g. "Method" */
+  title: string;
+  /** compiled depth: part=0 chapter=1 section=2 … */
+  level: number;
+  file: string;
+  line: number;
+  column: number;
+}
+
+export interface LabelEntry {
+  key: string;
+  file: string;
+  line: number;
+  column: number;
+  /** environment/context that defined it, when detectable */
+  kind?: 'section' | 'figure' | 'table' | 'equation' | 'other';
+}
+
+export interface ReferenceEntry {
+  key: string;
+  file: string;
+  line: number;
+  column: number;
+  kind: 'ref' | 'pageref' | 'eqref' | 'autoref';
+}
+
+export interface CitationEntry {
+  key: string;
+  file: string;
+  line: number;
+  column: number;
+  command: string;
+}
+
+export interface BibEntry {
+  key: string;
+  file: string;
+  line: number;
+  type: string;
+  /** "Smith, Jane" — raw author field when present */
+  author?: string;
+  title?: string;
+  year?: string;
+}
+
+export interface FigureTableEntry {
+  key: string | null;
+  caption: string | null;
+  file: string;
+  line: number;
+}
+
+export interface EquationEntry {
+  key: string | null;
+  file: string;
+  line: number;
+}
+
+export interface PackageEntry {
+  name: string;
+  options?: string;
+  file: string;
+  line: number;
+}
+
+export interface IncludeEdge {
+  /** file containing the directive */
+  from: string;
+  /** resolved target path inside the workspace (slash-separated, no ./) */
+  to: string;
+  kind: 'input' | 'include';
+  line: number;
+}
+
+/** Resolvable graphic asset for \includegraphics completion. */
+export interface GraphicsPathEntry {
+  path: string;
+  detail?: string;
+}
+
+export type IndexDiagnosticCode =
+  | 'UNDEFINED_REFERENCE'
+  | 'DUPLICATE_LABEL'
+  | 'UNDEFINED_CITATION';
+
+export interface IndexDiagnostic {
+  code: IndexDiagnosticCode;
+  severity: 'error' | 'warning';
+  message: string;
+  file: string;
+  line: number;
+  key: string;
+}
+
+export interface ProjectIndex {
+  /** workspace-relative slash paths that were parsed (tex + bib) */
+  files: string[];
+  /** main file used to root the include graph (may be null pre-detection) */
+  mainFile: string | null;
+  sections: SectionEntry[];
+  labels: LabelEntry[];
+  references: ReferenceEntry[];
+  citations: CitationEntry[];
+  bibEntries: BibEntry[];
+  figures: FigureTableEntry[];
+  tables: FigureTableEntry[];
+  equations: EquationEntry[];
+  packages: PackageEntry[];
+  includes: IncludeEdge[];
+  graphicsPaths: GraphicsPathEntry[];
+  diagnostics: IndexDiagnostic[];
+}

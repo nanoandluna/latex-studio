@@ -9,3 +9,4 @@ playwright-report/
 .workbuddy/
 
 *.tsbuildinfo
+.latex-studio/

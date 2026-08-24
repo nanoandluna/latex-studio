@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { authedFetch } from '../../api/client';
+import { authedFetch, api } from '../../api/client';
 import { usePreviewStore } from '../../stores/previewStore';
+import { useBuildStore } from '../../stores/buildStore';
+import { useEditorStore } from '../../stores/editorStore';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -278,6 +280,34 @@ export function PdfPreview() {
     [pageCount, scrollToPage]
   );
 
+  // ---- SyncTeX inverse: click a PDF location → jump to source -------------
+  const handleCanvasClick = useCallback(
+    async (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!(e.ctrlKey || e.metaKey || e.altKey)) return; // plain clicks stay passive
+      const buildId = useBuildStore.getState().buildId;
+      if (!buildId || !doc) return;
+      const canvas = e.currentTarget;
+      const holder = canvas.closest('[data-page-index]') as HTMLElement | null;
+      if (!holder) return;
+      const pageNum = Number(holder.dataset.pageIndex) + 1;
+      const rect = canvas.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      try {
+        const p = await doc.getPage(pageNum);
+        const vp1 = p.getViewport({ scale: 1, rotation });
+        const [x, y] = vp1.convertToPdfPoint(nx * vp1.width, ny * vp1.height);
+        const hit = await api.synctexInverse(buildId, pageNum, x, y);
+        if (hit?.file) {
+          await useEditorStore.getState().openFileAtLine(hit.file, hit.line);
+        }
+      } catch {
+        /* synctex unavailable or no mapping — ignore */
+      }
+    },
+    [doc, rotation]
+  );
+
   // ---- empty / error states -----------------------------------------------
   if (!pdfUrl) {
     return (
@@ -377,6 +407,8 @@ export function PdfPreview() {
                   className="relative bg-white shadow-md"
                 >
                   <canvas
+                    onClick={(ev) => void handleCanvasClick(ev)}
+                    title="Ctrl+Click for SyncTeX inverse search"
                     ref={(c) => {
                       canvasesRef.current[i] = c;
                     }}
@@ -402,28 +434,78 @@ export function PdfPreview() {
 }
 
 /** Find query occurrences on a page and map them to CSS-pixel viewport rects. */
+/**
+ * Find query occurrences on a page, including matches that span adjacent
+ * text items (whitespace-joined). Each occurrence produces one highlight
+ * rect per involved item portion.
+ */
 async function computeHighlights(
   p: pdfjsLib.PDFPageProxy,
   viewport: pdfjsLib.PageViewport,
   query: string
 ): Promise<HighlightRect[]> {
   const tc = await p.getTextContent();
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().replace(/\s+/g, ' ');
   const rects: HighlightRect[] = [];
+  if (!q) return rects;
 
+  interface Piece {
+    str: string;
+    lower: string;
+    tx: number[];
+    fontHeight: number;
+    widthCss: number;
+  }
+  const pieces: Piece[] = [];
   for (const item of tc.items) {
     if (!('str' in item) || !item.str) continue;
-    const lower = item.str.toLowerCase();
-    let start = lower.indexOf(q);
-    while (start !== -1 && rects.length < 50) {
-      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-      const fontHeight = Math.hypot(tx[2], tx[3]);
-      const itemWidthCss = item.width * viewport.scale;
-      const left = tx[4] + itemWidthCss * (start / item.str.length);
-      const top = tx[5] - fontHeight;
-      const width = Math.max(4, itemWidthCss * (q.length / item.str.length));
-      rects.push({ left, top, width, height: fontHeight * 1.15 });
-      start = lower.indexOf(q, start + q.length);
+    const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+    pieces.push({
+      str: item.str,
+      lower: item.str.toLowerCase(),
+      tx,
+      fontHeight: Math.hypot(tx[2], tx[3]),
+      widthCss: item.width * viewport.scale,
+    });
+  }
+
+  // Build concatenated stream with per-piece offsets (single space joins).
+  let haystack = '';
+  const pieceSpans: { start: number; end: number; pieceIdx: number }[] = [];
+  for (let pi = 0; pi < pieces.length; pi++) {
+    if (haystack.length > 0) haystack += ' ';
+    const start = haystack.length;
+    haystack += pieces[pi].lower;
+    pieceSpans.push({ start, end: haystack.length, pieceIdx: pi });
+  }
+
+  // Locate matches in the joined stream.
+  const matchStarts: number[] = [];
+  let pos = haystack.indexOf(q);
+  while (pos !== -1 && matchStarts.length < 50) {
+    matchStarts.push(pos);
+    pos = haystack.indexOf(q, pos + q.length);
+  }
+
+  for (const mStart of matchStarts) {
+    const mEnd = mStart + q.length;
+    for (const span of pieceSpans) {
+      const overlapStart = Math.max(mStart, span.start);
+      const overlapEnd = Math.min(mEnd, span.end);
+      if (overlapStart >= overlapEnd) continue;
+      const piece = pieces[span.pieceIdx];
+      const localStart = overlapStart - span.start;
+      const localLen = overlapEnd - overlapStart;
+      if (localLen <= 0 || localStart >= piece.lower.length) continue;
+      const ratio = Math.min(1, localStart / Math.max(1, piece.str.length));
+      const lenRatio = Math.min(1, localLen / Math.max(1, piece.str.length));
+      rects.push({
+        left: piece.tx[4] + piece.widthCss * ratio,
+        top: piece.tx[5] - piece.fontHeight,
+        width: Math.max(4, piece.widthCss * lenRatio),
+        height: piece.fontHeight * 1.15,
+      });
+      if (rects.length >= 80) return rects;
     }
   }
   return rects;

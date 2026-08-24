@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Header } from './components/layout/Header';
 import { Splitter } from './components/layout/Splitter';
-import { FileTree } from './components/explorer/FileTree';
+import { Sidebar } from './components/explorer/Sidebar';
 import { EditorPane } from './components/editor/EditorPane';
 import { PdfPreview } from './components/preview/PdfPreview';
 import { ProblemsPanel } from './components/problems/ProblemsPanel';
@@ -13,7 +13,7 @@ import { useWorkspaceStore } from './stores/workspaceStore';
 import { useUiStore } from './stores/uiStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useBuildStore } from './stores/buildStore';
-import { refreshCompletionContext } from './editor/latexCompletion';
+import { useProjectIndexStore } from './stores/projectIndexStore';
 
 export default function App() {
   const workspacePath = useWorkspaceStore((s) => s.path);
@@ -50,10 +50,10 @@ export default function App() {
     void bootstrap().then(() => refreshLatest());
   }, [bootstrap, refreshLatest]);
 
-  // Refresh completion context when the tree changes
+  // Refresh the project index whenever the file tree changes (open/save/etc).
   useEffect(() => {
-    if (tree) void refreshCompletionContext(tree);
-  }, [tree]);
+    if (tree && workspacePath) void useProjectIndexStore.getState().refresh();
+  }, [tree, workspacePath]);
 
   return (
     <div className="flex h-full flex-col">
@@ -67,7 +67,7 @@ export default function App() {
             {explorerVisible && (
               <>
                 <aside className="shrink-0 overflow-hidden border-r border-zinc-200 dark:border-zinc-800" style={{ width: explorerWidth }}>
-                  <FileTree />
+                  <Sidebar />
                 </aside>
                 <Splitter orientation="vertical" onResize={(d) => setExplorerWidth((w) => Math.min(500, Math.max(160, w + d)))} />
               </>

@@ -2,11 +2,13 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 import * as monacoNs from 'monaco-editor';
 import { loader } from '@monaco-editor/react';
-import { authedFetch } from '../../api/client';
+import { api } from '../../api/client';
 import { useEditorStore } from '../../stores/editorStore';
 import { useBuildStore } from '../../stores/buildStore';
 import { usePreviewStore } from '../../stores/previewStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useProjectIndexStore } from '../../stores/projectIndexStore';
+import { registerIndexCompletions } from '../../editor/indexCompletions';
 
 // Bundle Monaco locally — the app must work fully offline.
 loader.config({ monaco: monacoNs });
@@ -43,8 +45,9 @@ export function MonacoPane() {
     clearReveal();
   }, [revealTarget, activePath, clearReveal]);
 
-  const handleMount: OnMount = (editor) => {
+  const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    registerIndexCompletions(monaco as unknown as typeof monacoNs);
     editor.onDidChangeCursorPosition((e) => {
       if (activePath) setCursorLine(activePath, e.position.lineNumber);
     });
@@ -55,13 +58,8 @@ export function MonacoPane() {
       if (!line || !activePath) return;
       try {
         const buildId = useBuildStore.getState().buildId;
-        const res = await authedFetch('/api/synctex/forward', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ buildId, file: activePath, line }),
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { page: number };
+        if (!buildId) return;
+        const data = await api.synctexForward(buildId, activePath, line);
         if (data.page) usePreviewStore.getState().setPage(data.page);
       } catch {
         /* synctex unavailable — ignore */
@@ -86,7 +84,10 @@ export function MonacoPane() {
       path={tab.path}
       value={tab.content}
       theme={dark ? 'latex-studio-dark' : 'vs'}
-      onChange={(v) => updateContent(tab.path, v ?? '')}
+      onChange={(v) => {
+        updateContent(tab.path, v ?? '');
+        useProjectIndexStore.getState().pushBuffer(tab.path, v ?? '');
+      }}
       onMount={handleMount}
       options={{
         fontSize: 14,

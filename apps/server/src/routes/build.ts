@@ -96,10 +96,15 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/synctex/forward', async (req, reply) => {
+  /**
+   * SyncTeX forward search: source file+line -> PDF page (+position).
+   * The client-supplied path is jailed via safeResolve; only the resolved
+   * absolute path reaches the synctex CLI.
+   */
+  app.post('/api/build/:id/synctex/forward', async (req, reply) => {
     const root = workspaceService.requireWorkspace();
+    const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as {
-      buildId?: string;
       file?: string;
       line?: number;
       column?: number;
@@ -107,14 +112,12 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
     if (!body.file || !body.line) {
       return sendError(reply, new ApiError('INVALID_ARGUMENT', 'Missing file or line'));
     }
-    const rec = body.buildId
-      ? compilerService.getBuild(body.buildId)
-      : compilerService.getLatestBuild();
+    const rec = compilerService.getBuild(id);
     if (!rec || !rec.pdfAvailable) {
       return sendError(reply, new ApiError('BUILD_FAILED', 'No successful build available for SyncTeX'));
     }
     try {
-      // Validate first, then pass the RESOLVED path downstream — never the
+      // Validate first, then pass the RESOLVED path downstream - never the
       // raw client-supplied string.
       const abs = safeResolve(root, body.file);
       const result = await synctex.forwardSearch(
@@ -133,8 +136,55 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, err);
     }
   });
-}
 
+  /**
+   * SyncTeX inverse search: PDF page+x/y (72dpi points, scale=1 space) ->
+   * source file+line. The returned path is normalized to workspace-relative
+   * and re-jailed before it reaches the client.
+   */
+  app.post('/api/build/:id/synctex/inverse', async (req, reply) => {
+    const root = workspaceService.requireWorkspace();
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { page?: number; x?: number; y?: number };
+    if (!body.page || typeof body.x !== 'number' || typeof body.y !== 'number') {
+      return sendError(reply, new ApiError('INVALID_ARGUMENT', 'Missing page/x/y'));
+    }
+    const rec = compilerService.getBuild(id);
+    if (!rec || !rec.pdfAvailable) {
+      return sendError(reply, new ApiError('BUILD_FAILED', 'No successful build available for SyncTeX'));
+    }
+    try {
+      const result = await synctex.inverseSearch(
+        root,
+        path.join(root, BUILD_DIR_NAME),
+        rec.mainFile,
+        body.page,
+        body.x,
+        body.y
+      );
+      if (!result) {
+        return sendError(reply, new ApiError('INTERNAL_ERROR', 'SyncTeX unavailable or no mapping found', 404));
+      }
+      // Normalize + jail: synctex may echo absolute paths.
+      let rel: string;
+      const raw = result.file.replace(/\\/g, '/');
+      const rootAbs = root.replace(/\\/g, '/').replace(/\/$/, '');
+      if (path.isAbsolute(result.file)) {
+        if (!raw.toLowerCase().startsWith(rootAbs.toLowerCase() + '/')) {
+          return sendError(reply, new ApiError('PATH_FORBIDDEN', 'Synctex mapped outside the workspace'));
+        }
+        rel = raw.slice(rootAbs.length + 1);
+      } else {
+        rel = raw.replace(/^\.\//, '');
+      }
+      // Re-validate through the jail (also rejects ../ tricks inside the map).
+      safeResolve(root, rel);
+      return { file: rel, line: result.line, column: result.column };
+    } catch (err) {
+      return sendError(reply, err);
+    }
+  });
+}
 function sendError(reply: import('fastify').FastifyReply, err: unknown) {
   const payload = toErrorPayload(err);
   return reply.code(payload.statusCode).send({ error: payload.error });

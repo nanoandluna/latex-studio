@@ -11,6 +11,10 @@ A lightweight **local-first** LaTeX workspace: open a local `.tex` project in yo
 - **Workspace** — open any local folder as a LaTeX project; file tree with create / rename / delete / refresh; automatic main-file detection (`main.tex`, then any file containing `\documentclass`); manual override in the toolbar.
 - **Editor** — Monaco Editor with a custom LaTeX language (syntax highlighting, bracket matching, folding, minimap, search & replace), plus completions for `\begin{…}`, `\cite{…}` keys from your `.bib` files, `\ref/\label` keys, and `\includegraphics` paths.
 - **Multi-file** — tabs, dirty-state markers (`main.tex *`), `Ctrl+S` save.
+- **Project Index** *(V0.2)* — one incremental scanner (`packages/latex-parser`) builds a live index of sections, labels, references, citations, figures, tables, equations, packages and the `\input`/`\include` graph; editor buffers are re-indexed debounced without touching disk.
+- **Outline & Navigator** *(V0.2)* — sidebar tabs: clickable section tree with compiled numbering, plus a whole-project navigator (figures / tables / equations / citations / labels) — every node jumps to source.
+- **Reference & Citation Intelligence** *(V0.2)* — undefined references, duplicate labels and undefined citations appear live in Problems (no build needed) and as hovers in the editor.
+- **SyncTeX bidirectional** *(V0.2)* — `Ctrl+Click` in the source jumps to the PDF page; `Ctrl+Click` in the PDF maps back to the exact source line (graceful no-op when `synctex` is unavailable).
 - **Compile** — latexmk or direct engines via an isolated CompilerService; single-flight build queue (new builds cancel the running one), 180 s timeout, output isolated to `.build/`.
 - **PDF Preview** — PDF.js continuous scroll, zoom / fit-width / fit-page, page navigation, text search (jumps to page), rotate, download, fullscreen.
 - **Problems** — LaTeX log parsing into errors / warnings / info (`Undefined control sequence`, `Missing $`, file not found, undefined citations/references, overfull boxes) with click-to-jump to source line.
@@ -236,13 +240,12 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 | Port 3210 busy | Set `PORT=<n>` env var before `pnpm start`. |
 | Stale PDF after rebuild | Hard-refresh; each build URL is cache-busted, but the browser may cache the old tab state. |
 
-## Known limitations (v0.1.1)
+## Known limitations (v0.2.0)
 
-- Real-compilation paths (basic/chinese/multi-file/bibtex/biber/error fixtures) are fully automated via `RUN_LATEX_TESTS=1` but were **not executed on the development machine** — no TeX distribution was installed there. All such tests report `SKIPPED` honestly rather than passing.
-- SyncTeX: forward search (Ctrl+Click source → PDF page) implemented behind the `synctex` CLI; inverse search (PDF → source) is interface-only, planned V0.2.
-- PDF search highlights matches per text-item and jumps between them; it does not reflow across line-broken words split between items.
+- PDF search highlights matches per text-item (with cross-item joining); a match broken by hyphenation across a line end may still be missed.
 - Single workspace at a time; single user by design.
-- Image files show in the tree but aren't visually previewed.
+- The project index lives in memory for the server session — it rebuilds in well under a second on open, so no on-disk cache is persisted.
+- Spell/grammar checking is not provided.
 
 ## Roadmap
 

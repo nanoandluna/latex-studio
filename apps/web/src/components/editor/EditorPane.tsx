@@ -1,5 +1,8 @@
 import { useEditorStore } from '../../stores/editorStore';
 import { MonacoPane } from './MonacoPane';
+import { ImageViewer } from './ImageViewer';
+
+const PREVIEWABLE = /\.(png|jpe?g|gif|svg|pdf)$/i;
 
 function fileIcon(name: string): string {
   if (name.endsWith('.tex')) return 'TEX';
@@ -14,6 +17,9 @@ export function EditorPane() {
   const setActive = useEditorStore((s) => s.setActive);
   const closeTab = useEditorStore((s) => s.closeTab);
   const isDirty = useEditorStore((s) => s.isDirty);
+
+  const activeTab = tabs.find((t) => t.path === activePath) ?? null;
+  const showPreview = !!activeTab && PREVIEWABLE.test(activeTab.path);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -67,7 +73,11 @@ export function EditorPane() {
         </div>
       )}
       <div className="min-h-0 flex-1">
-        <MonacoPane />
+        {showPreview && activeTab ? (
+          <ImageViewer path={activeTab.path} />
+        ) : (
+          <MonacoPane />
+        )}
       </div>
     </div>
   );
