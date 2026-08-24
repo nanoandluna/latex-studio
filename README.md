@@ -4,6 +4,8 @@ A lightweight **local-first** LaTeX workspace: open a local `.tex` project in yo
 
 > Local-first + Web UI + LaTeX IDE + PDF Preview — no cloud, no accounts, fully offline.
 
+![LaTeX Studio — workspace with editor and PDF preview](docs/images/app.png)
+
 ## Features
 
 - **Workspace** — open any local folder as a LaTeX project; file tree with create / rename / delete / refresh; automatic main-file detection (`main.tex`, then any file containing `\documentclass`); manual override in the toolbar.
@@ -244,8 +246,8 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 
 ## Roadmap
 
-- **V0.2** — SyncTeX forward/inverse search
-- **V0.3** — BibTeX entry management
-- **V0.4** — Project templates (IEEE, ACM, Chinese thesis, Beamer)
-- **V0.5** — Git integration
-- **V0.6** — AI assistant (explain/fix/generate)
+- **V0.2 — LaTeX IDE Intelligence**: SyncTeX bidirectional search · Outline/Structure panel · Project Navigator (figures/tables/citations/labels) · **Project Index** (`packages/latex-index` — one incremental scanner feeding Outline, Navigator and IntelliSense) · context-aware IntelliSense 2.0 · PDF search highlight · image preview → [full plan](docs/V0.2-PLAN.md)
+- **V0.3 — Research Workspace**: Bib intelligence (hover cards, citation diagnostics) · reference/figure inspectors · project diagnostics · templates
+- **V0.4 — AI-native LaTeX**: error-fix / rewrite / explain / generate — driven by the Project Index, so the AI understands your whole paper, not just a text selection
+- **V0.5 — Engineering**: Git integration, snapshots, version history, export
+- Beyond: remote compiler, cloud workspace, collaboration (only if genuinely needed)
