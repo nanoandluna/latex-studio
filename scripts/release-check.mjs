@@ -13,6 +13,7 @@
  *   6. build             web + server production builds
  */
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -78,5 +79,6 @@ for (const [name, ok] of results) {
 }
 const allOk = results.every(([, ok]) => ok);
 console.log('\nRESULT:');
-console.log(allOk ? 'READY FOR V0.1.0' : 'NOT READY');
+const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+console.log(allOk ? `READY FOR v${version}` : 'NOT READY');
 process.exit(allOk ? 0 : 1);

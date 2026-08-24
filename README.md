@@ -51,7 +51,7 @@ tests/
 
 Key principle: the frontend never touches the filesystem or spawns processes — everything goes through the API, and compilation lives behind a `CompilerService` that can later be swapped for a remote/cloud provider.
 
-## V0.1.0 Release Verification
+## Release Verification (v0.1.x)
 
 ### 1. Install a TeX distribution
 
@@ -99,8 +99,10 @@ Web Build            PASS
 Server Build         PASS
 
 RESULT:
-READY FOR V0.1.0
+READY FOR v0.1.1
 ```
+
+(The verdict line is generated from the root `package.json` version.)
 
 Rules of the gate: without `RUN_LATEX_TESTS=1` real-compilation tests SKIP quietly (normal dev); **with** it, a missing TeX environment is a hard `BLOCKED` failure — a skip can never masquerade as a pass. Real build assertions check true artifacts: PDF exists, size > 0, header `%PDF-`, and a failed rebuild serves no PDF.
 
@@ -232,7 +234,7 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 | Port 3210 busy | Set `PORT=<n>` env var before `pnpm start`. |
 | Stale PDF after rebuild | Hard-refresh; each build URL is cache-busted, but the browser may cache the old tab state. |
 
-## Known limitations (V0.1.0-rc)
+## Known limitations (v0.1.1)
 
 - Real-compilation paths (basic/chinese/multi-file/bibtex/biber/error fixtures) are fully automated via `RUN_LATEX_TESTS=1` but were **not executed on the development machine** — no TeX distribution was installed there. All such tests report `SKIPPED` honestly rather than passing.
 - SyncTeX: forward search (Ctrl+Click source → PDF page) implemented behind the `synctex` CLI; inverse search (PDF → source) is interface-only, planned V0.2.
