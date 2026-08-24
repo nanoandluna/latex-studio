@@ -163,7 +163,7 @@ const ready = enginesOk;
 const fixturesDir = path.join(process.cwd(), 'tests', 'fixtures');
 const fixturesOk =
   fs.existsSync(fixturesDir) &&
-  ['basic', 'chinese', 'multi-file', 'bibliography', 'bibliography-biber', 'multi-file-bib', 'image', 'error', 'unicode-path'].every(
+  ['basic', 'chinese', 'multi-file', 'bibliography', 'bibliography-biber', 'multi-file-bib', 'image', 'error', 'unicode-path', 'beamer'].every(
     (f) => fs.existsSync(path.join(fixturesDir, f))
   );
 

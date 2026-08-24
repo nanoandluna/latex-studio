@@ -114,7 +114,7 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
     }
     const rec = compilerService.getBuild(id);
     if (!rec || !rec.pdfAvailable) {
-      return sendError(reply, new ApiError('BUILD_FAILED', 'No successful build available for SyncTeX'));
+      return sendError(reply, new ApiError('BUILD_FAILED', 'No successful build available for SyncTeX', 404));
     }
     try {
       // Validate first, then pass the RESOLVED path downstream - never the
@@ -151,7 +151,7 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
     }
     const rec = compilerService.getBuild(id);
     if (!rec || !rec.pdfAvailable) {
-      return sendError(reply, new ApiError('BUILD_FAILED', 'No successful build available for SyncTeX'));
+      return sendError(reply, new ApiError('BUILD_FAILED', 'No successful build available for SyncTeX', 404));
     }
     try {
       const result = await synctex.inverseSearch(

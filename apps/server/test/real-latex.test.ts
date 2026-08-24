@@ -215,3 +215,40 @@ describe.skipIf(!RUN || availableEngines.length === 0)('real build: unicode path
     await assertValidPdf(ws, 'main.tex');
   }, 900_000);
 });
+
+describe.skipIf(!RUN || availableEngines.length === 0)('real build: beamer', () => {
+  it('compiles a presentation class', async () => {
+    const ws = await tempWorkspace('beamer');
+    const rec = await manager.build(ws, { mainFile: 'main.tex', compiler: availableEngines[0] as EngineChoice });
+    if (rec.status !== 'success') failWithDiagnostics('beamer', rec);
+    await assertValidPdf(ws, 'main.tex');
+  }, 900_000);
+});
+
+describe.skipIf(!RUN || availableEngines.length === 0)('real build: large PDF (V0.2.1)', () => {
+  it('builds a ~120-page document and the PDF reports its page count', async () => {
+    const ws = await fs.mkdtemp(path.join(os.tmpdir(), 'lstudio-bigpdf-'));
+    // \newpage ×120 keeps compile fast while producing a genuinely large PDF
+    const body = Array.from({ length: 120 }, (_, i) => `Page ${i + 1}\\newpage`).join('\n');
+    await fs.writeFile(
+      path.join(ws, 'big.tex'),
+      `\\documentclass{article}\n\\begin{document}\n${body}\n\\end{document}\n`
+    );
+    const rec = await manager.build(ws, { mainFile: 'big.tex', compiler: availableEngines[0] as EngineChoice });
+    if (rec.status !== 'success') failWithDiagnostics('large-pdf', rec);
+
+    const pdfPath = path.join(ws, '.build', 'big.pdf');
+    const stat = await fs.stat(pdfPath);
+    expect(stat.size).toBeGreaterThan(10_000); // non-trivial artifact
+
+    // Authoritative page count via the same PDF.js the previewer uses.
+    const pdfjs = await import('pdfjs-dist');
+    const doc = await pdfjs.getDocument({
+      data: new Uint8Array(await fs.readFile(pdfPath)),
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    }).promise;
+    expect(doc.numPages).toBeGreaterThanOrEqual(100);
+    void doc.destroy();
+  }, 900_000);
+});

@@ -209,7 +209,7 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 | Port 3210 busy | Set `PORT=<n>` env var before `pnpm start`. |
 | SyncTeX jump does nothing | `synctex` CLI missing or the build predates `-synctex=1` output — rebuild once. |
 
-## Known limitations (v0.2.0)
+## Known limitations (v0.2.1)
 
 - PDF search highlights matches per text-item (with cross-item joining); a match broken by hyphenation across a line end may still be missed.
 - Single workspace at a time; single user by design.
@@ -218,8 +218,14 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 
 ## Roadmap
 
-- ~~V0.2 — LaTeX IDE Intelligence~~ ✅ shipped in v0.2.0 (Project Index · Outline · Navigator · IntelliSense 2.0 · SyncTeX bidirectional · PDF search highlight · image preview) — [plan](docs/V0.2-PLAN.md)
-- **V0.3 — Research Workspace**: Bib intelligence (hover cards → full entry management), reference/figure inspectors, project diagnostics, templates
-- **V0.4 — AI-native LaTeX**: error-fix / rewrite / explain / generate — driven by the Project Index, so the AI understands your whole paper
-- **V0.5 — Engineering**: Git integration, snapshots, version history, export
-- Beyond: remote compiler, cloud workspace, collaboration (only if genuinely needed)
+- ~~V0.1 — Local LaTeX Foundation~~ ✅
+- ~~V0.1.x — Hardening / Security~~ ✅ (instance-token auth, CSRF/DNS-rebinding guards, path-leak fixes)
+- ~~V0.2 — LaTeX IDE Intelligence~~ ✅ shipped in v0.2.0 — [plan](docs/V0.2-PLAN.md)
+- **V0.2.x — Real-world hardening** ← now: large-project index performance, repeated build/AutoBuild stability, Beamer & large-PDF compatibility (v0.2.1), plus feedback-driven fixes from real papers
+- **V0.3 — Research Workspace Intelligence**: persistent project intelligence (file watcher + dependency graph; symlink/junction safety treated as a first-class security concern), citation/reference/figure/table inspectors with usage stats, project diagnostics ("Research Health"), academic-writing checks (rule-based, no AI), template packages
+- **V0.3.x — SyncTeX diagnostics**: surface mapping availability/failure reasons so inverse jumps never fail silently
+- **V0.4 — AI-native LaTeX**: project-aware agent (error-fix / rewrite / explain / generate / refactor) standing on the Project Index
+- **V0.5 — Engineering**: Git integration, snapshots, diff, version history
+- Beyond: remote compiler, cloud workspace, collaboration
+
+Release policy: docs-only commits no longer linger between tag and master — patches are cut promptly so `master` equals the latest release.
