@@ -209,7 +209,7 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 | Port 3210 busy | Set `PORT=<n>` env var before `pnpm start`. |
 | SyncTeX jump does nothing | `synctex` CLI missing or the build predates `-synctex=1` output — rebuild once. |
 
-## Known limitations (v0.2.1)
+## Known limitations (v0.2.2)
 
 - PDF search highlights matches per text-item (with cross-item joining); a match broken by hyphenation across a line end may still be missed.
 - Single workspace at a time; single user by design.

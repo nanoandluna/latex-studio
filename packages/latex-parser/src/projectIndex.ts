@@ -47,7 +47,7 @@ export function parseEnvironments(content: string, file: string): {
 
   for (let i = 0; i < lines.length; i++) {
     const line = stripComments(lines[i]);
-    let m = line.match(/\\begin\{(figure\*?|table\*?|equation|align|gather|multline)\}/);
+    let m = line.match(/\\begin\{(figure\*?|table\*?|equation\*?|align\*?|gather\*?|multline\*?|flalign\*?)\}/);
     if (!m) continue;
     const env = m[1]!;
     // Find matching \end{env} allowing nested environments of other kinds.

@@ -108,13 +108,8 @@ export interface BibKeyEntry {
   type: string;
 }
 
-export interface LabelEntry {
-  key: string;
-  file: string;
-  line: number;
-}
-
 /** Result of a SyncTeX forward search (source → PDF). */
+
 export interface SyncTexForwardResult {
   page: number;
   x?: number;

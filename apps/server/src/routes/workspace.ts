@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { workspaceService } from '../services/workspaceService.js';
+import { projectIndexService } from '../services/projectIndexService.js';
 
 export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/workspace/open', async (req, reply) => {
@@ -32,11 +33,29 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     return { mainFile: await workspaceService.detectMainFile() };
   });
 
+  /** Legacy compat endpoints — served from the Project Index (no rescan). */
   app.get('/api/workspace/bibkeys', async () => {
-    return { keys: await workspaceService.collectBibKeys() };
+    await projectIndexService.refresh();
+    const snap = projectIndexService.getSnapshot();
+    return {
+      keys: (snap?.bibEntries ?? []).map((b) => ({
+        key: b.key,
+        file: b.file,
+        line: b.line,
+        type: b.type,
+      })),
+    };
   });
 
   app.get('/api/workspace/labels', async () => {
-    return { labels: await workspaceService.collectLabels() };
+    await projectIndexService.refresh();
+    const snap = projectIndexService.getSnapshot();
+    return {
+      labels: (snap?.labels ?? []).map((l) => ({
+        key: l.key,
+        file: l.file,
+        line: l.line,
+      })),
+    };
   });
 }

@@ -12,7 +12,7 @@ export function Splitter({ orientation, onResize, className = '' }: SplitterProp
   const lastPos = useRef(0);
 
   const handleMove = useCallback(
-    (e: MouseEvent | MouseEvent) => {
+    (e: MouseEvent) => {
       const pos = orientation === 'vertical' ? e.clientX : e.clientY;
       onResize(pos - lastPos.current);
       lastPos.current = pos;
