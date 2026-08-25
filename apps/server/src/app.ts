@@ -8,6 +8,7 @@ import { toErrorPayload } from './errors.js';
 import { createInstanceToken, registerSecurity } from './security.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerIndexRoutes } from './routes/index.js';
+import { registerTemplateRoutes } from './routes/templates.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerEnvRoutes } from './routes/env.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
@@ -49,6 +50,7 @@ export async function createApp() {
 
   await registerAuthRoutes(app, instanceToken);
   await registerIndexRoutes(app);
+  await registerTemplateRoutes(app);
   await registerHealthRoutes(app);
   await registerEnvRoutes(app);
   await registerWorkspaceRoutes(app);

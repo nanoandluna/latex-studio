@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ProjectIndex, IndexDiagnostic } from '@latex-studio/shared';
+import type { ProjectIndex } from '@latex-studio/shared';
 import { api } from '../api/client';
 import { useEditorStore } from './editorStore';
 
@@ -7,16 +7,13 @@ const BUFFER_DEBOUNCE_MS = 500;
 const REFRESH_DEBOUNCE_MS = 800;
 
 interface ProjectIndexState {
-  index: ProjectIndex | null;
+  index: (ProjectIndex & { version?: number; edges?: unknown[] }) | null;
+  /** monotonic graph revision of the stored index */
+  version: number;
   loading: boolean;
   lastError: string | null;
 
-  /** Full refresh (scan disk). Called on workspace open / tree refresh. */
   refresh: () => Promise<void>;
-  /**
-   * Push the live editor buffer for incremental re-parse (debounced).
-   * Never blocks typing — the previous index stays queryable.
-   */
   pushBuffer: (path: string, content: string) => void;
   reset: () => void;
 }
@@ -26,6 +23,7 @@ let refreshTimer: number | null = null;
 
 export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
   index: null,
+  version: 0,
   loading: false,
   lastError: null,
 
@@ -33,8 +31,14 @@ export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
     if (get().loading) return;
     set({ loading: true });
     try {
-      const index = await api.index();
-      set({ index, loading: false, lastError: null });
+      const body = await api.index() as ProjectIndex & { version?: number };
+      // V0.3 stale guard: never let an older revision overwrite a newer one.
+      const v = body?.version ?? 0;
+      if (v < get().version) {
+        set({ loading: false });
+        return;
+      }
+      set({ index: body, version: v, loading: false, lastError: null });
     } catch (err) {
       // Keep the previous index on failure — stale beats empty.
       set({ loading: false, lastError: (err as Error).message });
@@ -47,15 +51,18 @@ export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
     const t = window.setTimeout(async () => {
       bufferTimers.delete(path);
       try {
-        const index = await api.updateIndexBuffer(path, content);
-        if (index) set({ index });
+        const res = await api.updateIndexBuffer(path, content);
+        if (res) {
+          const body = res as ProjectIndex & { version?: number };
+          const v = body.version ?? 0;
+          if (v >= get().version) set({ index: body, version: v });
+        }
       } catch {
         /* transient — next save/refresh will resync */
       }
     }, BUFFER_DEBOUNCE_MS);
     bufferTimers.set(path, t);
 
-    // Also schedule a disk-truth refresh shortly after saves.
     if (refreshTimer) window.clearTimeout(refreshTimer);
     refreshTimer = window.setTimeout(() => {
       refreshTimer = null;
@@ -68,14 +75,9 @@ export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
     bufferTimers = new Map();
     if (refreshTimer) window.clearTimeout(refreshTimer);
     refreshTimer = null;
-    set({ index: null, loading: false, lastError: null });
+    set({ index: null, version: 0, loading: false, lastError: null });
   },
 }));
-
-/** Convenience: combined diagnostics from the project index. */
-export function selectIndexDiagnostics(): IndexDiagnostic[] {
-  return useProjectIndexStore.getState().index?.diagnostics ?? [];
-}
 
 // Keep the saved-event → index pipeline wired here so stores stay decoupled.
 if (typeof window !== 'undefined') {

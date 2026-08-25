@@ -1,0 +1,10 @@
+{
+  "id": "acm",
+  "name": "ACM Article",
+  "description": "acmart article",
+  "version": "1.0.0",
+  "mainFile": "main.tex",
+  "files": [
+    "main.tex"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "chinese-thesis",
+  "name": "Chinese Thesis (ctexbook)",
+  "description": "中文学位论文模板",
+  "version": "1.0.0",
+  "mainFile": "main.tex",
+  "files": [
+    "main.tex"
+  ]
+}

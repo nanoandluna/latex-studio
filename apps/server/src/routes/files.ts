@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { workspaceService } from '../services/workspaceService.js';
 import { projectIndexService } from '../services/projectIndexService.js';
-import { safeResolve } from '../utils/paths.js';
+import { safeResolve, safeRealpathInside } from '../utils/paths.js';
 import { toErrorPayload } from '../errors.js';
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -33,6 +33,9 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     if (!rel) return reply.code(400).send({ error: 'Missing path' });
     try {
       const abs = safeResolve(root, rel);
+      // V0.3 boundary hardening: follow the real path (through any symlink/
+      // junction) and verify it stays inside the workspace jail.
+      await safeRealpathInside(root, abs);
       const ext = path.extname(rel).toLowerCase();
       const mime = MIME_BY_EXT[ext];
       if (!mime) {

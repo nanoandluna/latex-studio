@@ -1,6 +1,6 @@
 {
   "name": "latex-studio",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "description": "A lightweight local LaTeX workspace: edit, compile, preview PDF in the browser.",
   "scripts": {

@@ -212,11 +212,14 @@ export interface GraphicsPathEntry {
 export type IndexDiagnosticCode =
   | 'UNDEFINED_REFERENCE'
   | 'DUPLICATE_LABEL'
-  | 'UNDEFINED_CITATION';
+  | 'UNDEFINED_CITATION'
+  | 'UNUSED_LABEL'
+  | 'UNUSED_CITATION'
+  | 'MISSING_INCLUDE';
 
 export interface IndexDiagnostic {
   code: IndexDiagnosticCode;
-  severity: 'error' | 'warning';
+  severity: 'error' | 'warning' | 'info';
   message: string;
   file: string;
   line: number;
@@ -239,5 +242,79 @@ export interface ProjectIndex {
   packages: PackageEntry[];
   includes: IncludeEdge[];
   graphicsPaths: GraphicsPathEntry[];
+  edges?: ProjectEdge[];
+  version?: number;
+  generatedAt?: number;
   diagnostics: IndexDiagnostic[];
+}
+
+// ---------------------------------------------------------------------------
+// V0.3 — Project Graph, watcher, research workspace
+// ---------------------------------------------------------------------------
+
+export type ProjectEdgeKind =
+  | 'INCLUDES'
+  | 'REFERENCES'
+  | 'CITES'
+  | 'USES_GRAPHIC'
+  | 'DEFINES'
+  | 'CONTAINS';
+
+export interface ProjectEdge {
+  kind: ProjectEdgeKind;
+  /** workspace-relative source of the edge */
+  from: string;
+  /**
+   * target: file path for INCLUDES/USES_GRAPHIC/CONTAINS, symbol key for
+   * REFERENCES/CITES/DEFINES. Always jail-safe (no .. / absolute).
+   */
+  to: string;
+  line: number;
+}
+
+/** Monotonic counter — bumped on every committed graph mutation. */
+export interface GraphEnvelope {
+  version: number;
+  generatedAt: number;
+  root: string;
+  graph: ProjectIndex & { edges: ProjectEdge[] };
+}
+
+export interface RecentProject {
+  path: string;
+  name: string;
+  lastOpened: number;
+}
+
+export interface TemplateManifest {
+  id: string;
+  name: string;
+  description?: string;
+  version: string;
+  mainFile: string;
+  files: string[];
+}
+
+export interface SynctexDiagnostics {
+  executableFound: boolean;
+  mappingFileExists: boolean;
+  pdfMatchesBuild: boolean;
+  ok: boolean;
+  reason?: string;
+  suggestion?: string;
+}
+
+export type WritingCheckCode =
+  | 'REPEATED_WORD'
+  | 'LONG_SENTENCE'
+  | 'TODO_FIXME'
+  | 'EMPTY_SECTION'
+  | 'SUSPICIOUS_PUNCTUATION';
+
+export interface WritingDiagnostic {
+  code: WritingCheckCode;
+  severity: 'warning' | 'info';
+  message: string;
+  file: string;
+  line: number;
 }

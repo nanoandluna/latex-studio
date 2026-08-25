@@ -21,3 +21,8 @@ export {
   type BuildProjectIndexInput,
 } from './projectIndex.js';
 export type { LogParseResult } from './errorParser.js';
+export {
+  ProjectGraphQuery,
+  deriveEdges,
+  deriveGraphDiagnostics,
+} from './graph.js';

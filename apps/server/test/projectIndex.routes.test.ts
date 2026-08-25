@@ -144,6 +144,7 @@ describe('/api/index/update', () => {
     });
     expect(res.statusCode).toBe(200);
     // evil path must NOT appear
-    expect(res.json().files).not.toContain('../outside.tex');
+    expect(JSON.stringify(res.json())).not.toContain('Evil');
+    expect(res.json().files ?? []).not.toContain('../outside.tex');
   });
 });

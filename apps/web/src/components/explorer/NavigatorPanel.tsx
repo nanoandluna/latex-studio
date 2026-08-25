@@ -2,7 +2,14 @@ import { useMemo, useState } from 'react';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { useEditorStore } from '../../stores/editorStore';
 
-type GroupKey = 'sections' | 'figures' | 'tables' | 'equations' | 'citations' | 'labels';
+type GroupKey =
+  | 'sections'
+  | 'figures'
+  | 'tables'
+  | 'equations'
+  | 'citations'
+  | 'labels'
+  | 'diagnostics';
 
 const GROUPS: { key: GroupKey; label: string; icon: string }[] = [
   { key: 'sections', label: 'Sections', icon: '§' },
@@ -11,62 +18,174 @@ const GROUPS: { key: GroupKey; label: string; icon: string }[] = [
   { key: 'equations', label: 'Equations', icon: '∑' },
   { key: 'citations', label: 'Citations', icon: '📚' },
   { key: 'labels', label: 'Labels', icon: '#' },
+  { key: 'diagnostics', label: 'Diagnostics', icon: '⚠' },
 ];
+
+interface Row {
+  title: string;
+  file: string;
+  line: number;
+  hint?: string;
+  /** usage count badge */
+  uses?: number;
+  /** problem marker (undefined / unused / missing) */
+  flag?: 'undefined' | 'unused';
+}
 
 export function NavigatorPanel() {
   const index = useProjectIndexStore((s) => s.index);
   const openFileAtLine = useEditorStore((s) => s.openFileAtLine);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const grouped = useMemo(() => {
     if (!index) return null;
-    return {
-      sections: index.sections.map((s) => ({
-        title: s.title,
-        file: s.file,
-        line: s.line,
-        hint: `${s.file}:${s.line}`,
-      })),
-      figures: index.figures.map((f) => ({
-        title: f.caption ?? f.key ?? '(figure)',
-        file: f.file,
-        line: f.line,
-        hint: f.key ?? `${f.file}:${f.line}`,
-      })),
-      tables: index.tables.map((t) => ({
-        title: t.caption ?? t.key ?? '(table)',
-        file: t.file,
-        line: t.line,
-        hint: t.key ?? `${t.file}:${t.line}`,
-      })),
-      equations: index.equations.map((e) => ({
-        title: e.key ?? '(equation)',
-        file: e.file,
-        line: e.line,
-        hint: e.key ?? `${e.file}:${e.line}`,
-      })),
-      citations: dedupe(
-        index.citations.map((c) => ({
-          title: c.key,
-          file: c.file,
-          line: c.line,
-          hint: bibTitle(index, c.key),
-        }))
-      ),
-      labels: dedupe(
-        index.labels.map((l) => ({ title: l.key, file: l.file, line: l.line, hint: `${l.file}:${l.line}` }))
-      ),
-    };
+    const refCount = new Map<string, number>();
+    for (const r of index.references) refCount.set(r.key, (refCount.get(r.key) ?? 0) + 1);
+    const citeCount = new Map<string, number>();
+    for (const c of index.citations) citeCount.set(c.key, (citeCount.get(c.key) ?? 0) + 1);
+    const bibKeys = new Set(index.bibEntries.map((b) => b.key));
+    const labelKeys = new Set(index.labels.map((l) => l.key));
+
+    const sections = index.sections.map((s) => ({
+      title: s.title,
+      file: s.file,
+      line: s.line,
+      hint: `${s.file}:${s.line}`,
+    }));
+    const figures = index.figures.map((f) => ({
+      title: f.caption ?? f.key ?? '(figure)',
+      file: f.file,
+      line: f.line,
+      hint: f.key ?? '',
+      uses: f.key ? (refCount.get(f.key) ?? 0) : undefined,
+    }));
+    const tables = index.tables.map((t) => ({
+      title: t.caption ?? t.key ?? '(table)',
+      file: t.file,
+      line: t.line,
+      hint: t.key ?? '',
+      uses: t.key ? (refCount.get(t.key) ?? 0) : undefined,
+    }));
+    const equations = index.equations.map((e) => ({
+      title: e.key ?? '(equation)',
+      file: e.file,
+      line: e.line,
+      hint: e.key ?? '',
+      uses: e.key ? (refCount.get(e.key) ?? 0) : undefined,
+    }));
+    const citations = dedupe(
+      index.citations.map((c) => ({
+        title: c.key,
+        file: c.file,
+        line: c.line,
+        hint: bibTitle(index, c.key),
+        uses: citeCount.get(c.key) ?? 0,
+        flag: bibKeys.has(c.key) ? undefined : ('undefined' as const),
+      }))
+    );
+    const labels = dedupe(
+      index.labels.map((l) => ({
+        title: l.key,
+        file: l.file,
+        line: l.line,
+        hint: `${l.file}:${l.line}`,
+        uses: refCount.get(l.key) ?? 0,
+        flag: (refCount.get(l.key) ?? 0) === 0 ? ('unused' as const) : undefined,
+      }))
+    );
+
+    // usage sites per symbol for the inline inspector expansion
+    const usages = new Map<string, typeof index.references>();
+    for (const r of index.references) {
+      const arr = usages.get(r.key);
+      if (arr) arr.push(r);
+      else usages.set(r.key, [r]);
+    }
+
+    const diagnostics = index.diagnostics.map((d) => ({
+      title: d.message,
+      file: d.file || 'main.tex',
+      line: d.line || 1,
+      hint: d.code,
+      severity: d.severity as string,
+    }));
+
+    return { sections, figures, tables, equations, citations, labels, diagnostics, usages, labelKeys };
   }, [index]);
 
   if (!grouped) {
     return <div className="px-3 py-2 text-xs text-zinc-400">No index yet.</div>;
   }
 
+  const renderRows = (key: GroupKey, items: Row[]) =>
+    items.slice(0, 120).map((it, i) => {
+      const expandKey = `${key}:${i}`;
+      const isOpen = expanded[expandKey];
+      const usageSites =
+        key === 'labels' || key === 'figures' || key === 'tables' || key === 'equations'
+          ? grouped.usages.get(it.title) ?? []
+          : [];
+      const hasUsages = usageSites.length > 0;
+      return (
+        <div key={`${key}:${i}:${it.line}`}>
+          <button
+            onClick={async () => {
+              if (hasUsages && it.uses !== undefined && it.uses > 1) {
+                setExpanded((e) => ({ ...e, [expandKey]: !e[expandKey] }));
+                return;
+              }
+              await openFileAtLine(it.file, it.line);
+            }}
+            onDoubleClick={() => void openFileAtLine(it.file, it.line)}
+            title={`${it.hint} — ${it.file}:${it.line}`}
+            className="flex w-full items-baseline gap-2 rounded py-0.5 pr-2 pl-7 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <span className="truncate">{it.title}</span>
+            {it.flag && (
+              <span
+                className={`shrink-0 rounded px-1 text-[9px] ${
+                  it.flag === 'undefined'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                    : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                }`}
+              >
+                {it.flag}
+              </span>
+            )}
+            {typeof it.uses === 'number' && (
+              <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-400">
+                ×{it.uses}
+              </span>
+            )}
+          </button>
+          {isOpen &&
+            usageSites.map((u, k) => (
+              <button
+                key={k}
+                onClick={() => void openFileAtLine(u.file, u.line)}
+                className="block w-full rounded py-0.5 pr-2 pl-11 text-left text-[10px] text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                ↳ {u.file}:{u.line}
+              </button>
+            ))}
+          {!hasUsages && null}
+        </div>
+      );
+    });
+
   return (
     <div className="pb-2">
       {GROUPS.map(({ key, label, icon }) => {
-        const items = grouped[key];
+        const items =
+          key === 'diagnostics'
+            ? (grouped.diagnostics.map((d) => ({
+                title: d.title,
+                file: d.file,
+                line: d.line,
+                severity: d.severity,
+              })) as unknown as Row[])
+            : ((grouped[key] ?? []) as unknown as Row[]);
         const isCollapsed = collapsed[key];
         return (
           <div key={key} className="mt-1">
@@ -77,24 +196,11 @@ export function NavigatorPanel() {
               <span className="w-3">{isCollapsed ? '▸' : '▾'}</span>
               <span>{icon}</span>
               <span>{label}</span>
-              <span className="ml-auto font-normal normal-case">{items.length || ''}</span>
+              {items.length > 0 && (
+                <span className="ml-auto font-normal normal-case">{items.length}</span>
+              )}
             </button>
-            {!isCollapsed &&
-              items.slice(0, 100).map((it, i) => (
-                <button
-                  key={`${key}:${i}:${it.title}:${it.line}`}
-                  onClick={() => void openFileAtLine(it.file, it.line)}
-                  title={`${it.hint} — ${it.file}:${it.line}`}
-                  className="flex w-full items-baseline gap-2 rounded py-0.5 pr-2 pl-7 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                >
-                  <span className="truncate">{it.title}</span>
-                  {it.hint !== it.title && (
-                    <span className="ml-auto shrink-0 truncate pl-2 font-mono text-[10px] text-zinc-400">
-                      {it.hint}
-                    </span>
-                  )}
-                </button>
-              ))}
+            {!isCollapsed && renderRows(key, items)}
           </div>
         );
       })}
@@ -112,7 +218,9 @@ function dedupe<T extends { title: string; file: string; line: number }>(items: 
   });
 }
 
-function bibTitle(index: NonNullable<ReturnType<typeof useProjectIndexStore.getState>['index']>, key: string): string {
+type IndexShape = NonNullable<ReturnType<typeof useProjectIndexStore.getState>['index']>;
+
+function bibTitle(index: IndexShape, key: string): string {
   const entry = index.bibEntries.find((b) => b.key === key);
   if (!entry) return 'missing in .bib';
   const bits = [entry.author?.split(' and ')[0], entry.year].filter(Boolean);

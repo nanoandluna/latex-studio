@@ -63,3 +63,17 @@ export function isTextFile(name: string): boolean {
   if (!ext) return false;
   return false;
 }
+
+/**
+ * V0.3 filesystem-boundary hardening: resolve the REAL path (following any
+ * symlink/junction/reparse point) and verify it still lands inside the real
+ * root. Throws PathTraversalError when a link escapes the workspace.
+ */
+export async function safeRealpathInside(root: string, absPath: string): Promise<string> {
+  const [realAbs, realRoot] = await Promise.all([fs.realpath(absPath), fs.realpath(root)]);
+  const normRoot = realRoot.replace(/[/\\\\]+\$/, '');
+  if (realAbs !== normRoot && !realAbs.startsWith(normRoot + path.sep)) {
+    throw new PathTraversalError(absPath);
+  }
+  return realAbs;
+}

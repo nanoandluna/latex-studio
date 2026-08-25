@@ -41,6 +41,7 @@ export function PdfPreview() {
   const [highlights, setHighlights] = useState<Record<number, HighlightRect[]>>({});
   const [currentMatch, setCurrentMatch] = useState(0); // 1-based, 0 = none
   const [searching, setSearching] = useState(false);
+  const [synctexDiag, setSynctexDiag] = useState<string | null>(null);
 
   const totalPages = doc?.numPages ?? 0;
 
@@ -82,6 +83,20 @@ export function PdfPreview() {
         if (!cancelled) {
           setDoc(loaded);
           setPageCount(loaded.numPages);
+          // V0.3 SyncTeX diagnostics (non-fatal indicator)
+          fetch('/api/build/latest')
+            .then((r) => r.json())
+            .then((latest) => {
+              if (!latest?.buildId) return;
+              return fetch(
+                `/api/build/${encodeURIComponent(latest.buildId)}/synctex/diagnostics`
+              ).then((r) => r.json());
+            })
+            .then((d) => {
+              if (!d) return;
+              setSynctexDiag(d.ok ? null : `SyncTeX unavailable — ${d.reason ?? ''} ${d.suggestion ?? ''}`);
+            })
+            .catch(() => {});
         } else {
           void loaded.destroy();
         }
@@ -362,6 +377,9 @@ export function PdfPreview() {
           />
           <span className="whitespace-nowrap tabular-nums text-zinc-400">{counter}</span>
         </div>
+        {synctexDiag && (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-200" title={synctexDiag}>⚠ SyncTeX</span>
+        )}
 
         <div className="flex-1" />
         <button

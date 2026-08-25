@@ -10,3 +10,4 @@ playwright-report/
 
 *.tsbuildinfo
 .latex-studio/
+!templates/

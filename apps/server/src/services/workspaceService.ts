@@ -53,6 +53,8 @@ export class WorkspaceService {
       if (entry.name.startsWith('.') && entry.name !== '.gitignore') continue;
       if (IGNORED_DIRS.has(entry.name) || IGNORED_FILES.has(entry.name)) continue;
       const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
+      // V0.3 security: skip links that may escape the workspace.
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
         children.push(await this.walk(path.join(absDir, entry.name), relPath));
       } else if (entry.isFile()) {

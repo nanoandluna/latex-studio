@@ -1,19 +1,28 @@
 import type { FastifyInstance } from 'fastify';
 import { workspaceService } from '../services/workspaceService.js';
 import { projectIndexService } from '../services/projectIndexService.js';
+import { readRecents, recordRecent } from '../services/recentProjects.js';
 
 export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/workspace/recent', async () => {
+    return { recents: readRecents() };
+  });
+
   app.post('/api/workspace/open', async (req, reply) => {
     const { path: dir } = (req.body ?? {}) as { path?: string };
     if (!dir || typeof dir !== 'string') {
       return reply.code(400).send({ error: 'Missing workspace path' });
     }
     const opened = await workspaceService.open(dir);
+    recordRecent(opened.path);
+    // V0.3: keep the index fresh on external changes for THIS root only.
+    projectIndexService.enableAutoRefresh(opened.path);
     const mainFile = await workspaceService.detectMainFile();
     return { ...opened, mainFile };
   });
 
   app.post('/api/workspace/close', async () => {
+    projectIndexService.disableAutoRefresh();
     await workspaceService.close();
     return { ok: true };
   });

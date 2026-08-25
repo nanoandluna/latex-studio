@@ -1,0 +1,10 @@
+{
+  "id": "ieee",
+  "name": "IEEE Conference",
+  "description": "IEEEtran conference paper",
+  "version": "1.0.0",
+  "mainFile": "main.tex",
+  "files": [
+    "main.tex"
+  ]
+}

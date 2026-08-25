@@ -1,0 +1,10 @@
+{
+  "id": "beamer",
+  "name": "Beamer Presentation",
+  "description": "Slide deck",
+  "version": "1.0.0",
+  "mainFile": "main.tex",
+  "files": [
+    "main.tex"
+  ]
+}

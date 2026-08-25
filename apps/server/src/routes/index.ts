@@ -1,6 +1,26 @@
 import type { FastifyInstance } from 'fastify';
+import { promises as fs } from 'node:fs';
 import { projectIndexService } from '../services/projectIndexService.js';
 import { workspaceService } from '../services/workspaceService.js';
+import { analyzeWriting } from '../services/writingChecks.js';
+
+function envelope(index: import('@latex-studio/shared').ProjectIndex) {
+  // V0.3 structured response: the graph fields stay TOP-LEVEL (backward
+  // compatible with every existing consumer) plus monotonic revision and
+  // workspace root for stale-response guards.
+  const { edges, version, generatedAt, ...graph } = index as typeof index & {
+    edges: unknown;
+    version: number;
+    generatedAt: number;
+  };
+  return {
+    ...graph,
+    edges,
+    version: version ?? 0,
+    generatedAt: generatedAt ?? Date.now(),
+    root: workspaceService.workspacePath ?? '',
+  };
+}
 
 export async function registerIndexRoutes(app: FastifyInstance): Promise<void> {
   /** Latest available index (refreshes automatically after a workspace switch). */
@@ -8,7 +28,8 @@ export async function registerIndexRoutes(app: FastifyInstance): Promise<void> {
     if (projectIndexService.needsRebuild()) {
       await projectIndexService.refresh();
     }
-    return projectIndexService.getSnapshot();
+    const snap = projectIndexService.getSnapshot();
+    return snap ? envelope(snap) : null;
   });
 
   /** Force a refresh; concurrent callers share the in-flight scan. */
@@ -31,16 +52,41 @@ export async function registerIndexRoutes(app: FastifyInstance): Promise<void> {
         safeResolve(workspaceService.workspacePath, rel);
         projectIndexService.updateBuffer(rel, content);
         accepted = true;
+        if (process.env.LS_DEBUG) {
+          const svc = projectIndexService as unknown as { buffers: Map<string,string> };
+        }
       } catch {
-        /* invalid path — ignore silently, index stays as-is */
+        /* invalid path — ignore silently */
       }
     }
-    if (!accepted) {
-      return projectIndexService.getSnapshot();
+    if (accepted) {
+      // Always re-index after accepting a buffer (incremental + cached →
+      // cheap) so the RESPONSE reflects it.
+      await projectIndexService.refresh();
+    } else if (projectIndexService.needsRebuild()) {
+      await projectIndexService.refresh();
     }
-    // Re-parse (incremental: unchanged files come from cache) so callers get
-    // an index that already includes this buffer.
-    await projectIndexService.refresh();
-    return projectIndexService.getSnapshot();
+    const snap = projectIndexService.getSnapshot();
+    return snap ? envelope(snap) : null;
+  });
+
+  /** Rule-based academic-writing checks over the current tex sources. */
+  app.get('/api/writing-checks', async (req) => {
+    const enabled = (req.query as { disabled?: string }).disabled !== '1';
+    if (!enabled || !workspaceService.workspacePath) return { diagnostics: [] };
+    const { index } = await projectIndexService.refresh();
+    const diags = [];
+    for (const file of index.files.filter((f) => f.endsWith('.tex'))) {
+      try {
+        const abs = (
+          await import('../utils/paths.js')
+        ).safeResolve(workspaceService.workspacePath, file);
+        const content = await fs.readFile(abs, 'utf8');
+        diags.push(...analyzeWriting(content, file));
+      } catch {
+        /* unreadable → skip */
+      }
+    }
+    return { diagnostics: diags };
   });
 }

@@ -1,0 +1,10 @@
+{
+  "id": "article",
+  "name": "Article",
+  "description": "Standard article",
+  "version": "1.0.0",
+  "mainFile": "main.tex",
+  "files": [
+    "main.tex"
+  ]
+}

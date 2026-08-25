@@ -2,11 +2,15 @@ import { useBuildStore } from '../../stores/buildStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useUiStore } from '../../stores/uiStore';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
-import { useMemo } from 'react';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useEffect, useMemo, useState } from 'react';
 import type { Problem } from '@latex-studio/shared';
 
 export function ProblemsPanel() {
   const index = useProjectIndexStore((s) => s.index);
+  const writingChecksEnabled = useSettingsStore((s) => s.writingChecks);
+  const setWritingChecks = useSettingsStore((s) => s.setWritingChecks);
+  const [writing, setWriting] = useState<import('@latex-studio/shared').WritingDiagnostic[]>([]);
   const buildProblems = useBuildStore((s) => s.problems);
 
   const log = useBuildStore((s) => s.log);
@@ -22,8 +26,30 @@ export function ProblemsPanel() {
   // s.index?.diagnostics ?? [] selector allocates a fresh array per store
   // event and causes render storms (React #185).
   const indexDiags = useMemo(() => index?.diagnostics ?? [], [index]);
+
+  // V0.3 rule-based writing checks (toggleable, info-tier)
+  useEffect(() => {
+    if (!writingChecksEnabled || !index) {
+      setWriting([]);
+      return;
+    }
+    let cancelled = false;
+    import('../../api/client').then(({ api }) =>
+      api.writingChecks().then((r) => {
+        if (!cancelled) setWriting(r.diagnostics);
+      }).catch(() => {})
+    );
+    return () => { cancelled = true; };
+  }, [writingChecksEnabled, index]);
   const problems: (Problem & { source: 'build' | 'index' })[] = [
     ...buildProblems.map((p) => ({ ...p, source: 'build' as const })),
+    ...writing.map((d) => ({
+      severity: d.severity,
+      message: `[writing] ${d.message} (${d.code})`,
+      file: d.file,
+      line: d.line,
+      source: 'index' as const,
+    })),
     ...indexDiags.map((d) => ({
       severity: d.severity,
       message: d.message,
@@ -34,6 +60,16 @@ export function ProblemsPanel() {
   ];
   const errors = problems.filter((p) => p.severity === 'error');
   const warnings = problems.filter((p) => p.severity === 'warning');
+
+  const healthScore = useMemo(() => {
+    let score = 100;
+    for (const p of problems) {
+      if (p.severity === 'error') score -= 10;
+      else if (p.severity === 'warning') score -= 3;
+      else score -= 1;
+    }
+    return Math.max(0, score);
+  }, [problems]);
 
   const statusText =
     status === 'running' || status === 'starting' || status === 'queued'
@@ -79,6 +115,23 @@ export function ProblemsPanel() {
             {notice}
           </span>
         )}
+        <label
+          className="ml-auto flex cursor-pointer items-center gap-1 text-[10px] text-zinc-500 select-none"
+          title="Rule-based academic writing checks (local, no AI)"
+        >
+          <input
+            type="checkbox"
+            checked={writingChecksEnabled}
+            onChange={(e) => setWritingChecks(e.target.checked)}
+          />
+          Writing checks
+        </label>
+        <span
+          className="rounded px-1.5 py-0.5 font-mono text-[10px] text-zinc-500"
+          title="Health = 100 − 10×errors − 3×warnings − 1×info (deterministic)"
+        >
+          Health {healthScore}
+        </span>
         <div className="flex-1" />
         {bottomTab === 'output' && (
           <button className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={clearLog}>

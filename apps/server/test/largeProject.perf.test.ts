@@ -80,7 +80,8 @@ describe('large project index (V0.2.1 hardening)', () => {
         },
       });
       expect(res.statusCode).toBe(200);
-      const idx = res.json();
+      const body2 = res.json();
+      const idx = body2.graph ?? body2;
       // consistency: no duplicated sections accumulate across updates
       const s0 = idx.sections.filter((s: { key?: string; title: string }) =>
         s.title.startsWith('Section 000')
@@ -90,7 +91,8 @@ describe('large project index (V0.2.1 hardening)', () => {
     expect(lastDurationOk).toBe(true);
 
     // final state reflects the LAST buffer, not an interleaving
-    const snap = (await app.inject({ method: 'GET', url: '/api/index' })).json();
+    const snapRes = await app.inject({ method: 'GET', url: '/api/index' });
+    const snap = (snapRes.json().graph ?? snapRes.json()) as import('@latex-studio/shared').ProjectIndex;
     expect(
       snap.sections.filter((s: { title: string }) => s.title.startsWith('Section 000'))
     ).toHaveLength(1);

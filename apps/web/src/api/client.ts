@@ -99,14 +99,16 @@ export const api = {
   labels: () => request<{ labels: LabelEntry[] }>('/api/workspace/labels'),
 
   // ---- Project Index (V0.2) ----
-  index: () => request<ProjectIndex>('/api/index'),
+  index: () => request<ProjectIndex & { version?: number }>('/api/index'),
   refreshIndex: () =>
-    request<{ filesParsed: number; cacheHits: number; durationMs: number; index: ProjectIndex }>(
-      '/api/index/refresh',
-      { method: 'POST' }
-    ),
+    request<{
+        filesParsed: number;
+        cacheHits: number;
+        durationMs: number;
+        index: ProjectIndex & { version?: number };
+      }>('/api/index/refresh', { method: 'POST' }),
   updateIndexBuffer: (path: string, content: string) =>
-    request<ProjectIndex>('/api/index/update', {
+    request<ProjectIndex & { version?: number }>('/api/index/update', {
       method: 'POST',
       body: JSON.stringify({ path, content }),
     }),
@@ -118,6 +120,32 @@ export const api = {
     request<{ page: number; x?: number; y?: number }>(
       `/api/build/${encodeURIComponent(buildId)}/synctex/forward`,
       { method: 'POST', body: JSON.stringify({ file, line, column }) }
+    ),
+
+  synctexDiagnostics: (buildId: string) =>
+    request<import('@latex-studio/shared').SynctexDiagnostics>(
+      `/api/build/${encodeURIComponent(buildId)}/synctex/diagnostics`
+    ),
+
+  writingChecks: () =>
+    request<{ diagnostics: import('@latex-studio/shared').WritingDiagnostic[] }>(
+      '/api/writing-checks'
+    ),
+
+  templates: () =>
+    request<{
+      templates: { id: string; name: string; description?: string; mainFile: string }[];
+    }>('/api/templates'),
+
+  createFromTemplate: (id: string, targetDir: string) =>
+    request<{ ok: boolean; path: string; name: string; mainFile: string }>(
+      '/api/templates/create',
+      { method: 'POST', body: JSON.stringify({ id, targetDir }) }
+    ),
+
+  recentProjects: () =>
+    request<{ recents: { path: string; name: string; lastOpened: number }[] }>(
+      '/api/workspace/recent'
     ),
 
   synctexInverse: (buildId: string, page: number, x: number, y: number) =>

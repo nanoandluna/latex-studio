@@ -7,6 +7,8 @@ import { safeResolve } from '../utils/paths.js';
 import { ApiError, isPathTraversalError, toErrorPayload } from '../errors.js';
 import { BUILD_DIR_NAME } from '../services/compilerService.js';
 import { SyncTexService } from '../compiler/synctexService.js';
+import { detectTool } from '../compiler/detector.js';
+import { ArtifactManager } from '../compiler/artifactManager.js';
 import type { BuildOptions, CompilerChoice } from '@latex-studio/shared';
 
 const VALID_COMPILERS: CompilerChoice[] = ['auto', 'latexmk', 'xelatex', 'pdflatex', 'lualatex'];
@@ -94,6 +96,49 @@ export async function registerBuildRoutes(app: FastifyInstance): Promise<void> {
       // toErrorPayload — no paths are echoed either way.
       return sendError(reply, err);
     }
+  });
+
+  /** V0.3: SyncTeX availability diagnostics for this build. */
+  app.get('/api/build/:id/synctex/diagnostics', async (req) => {
+    const { id } = req.params as { id: string };
+    const rec = compilerService.getBuild(id);
+    const tool = detectTool('synctex');
+    const executableFound = !!tool?.available;
+
+    if (!rec || !rec.pdfAvailable) {
+      return {
+        executableFound,
+        mappingFileExists: false,
+        pdfMatchesBuild: false,
+        ok: false,
+        reason: 'No successful build available',
+        suggestion: 'Build the project first (Ctrl+B).',
+      };
+    }
+    const artifacts = new ArtifactManager(path.join(rec.workspacePath, BUILD_DIR_NAME));
+    let mappingFileExists = false;
+    try {
+      await fs.access(artifacts.synctexPath(rec.mainFile));
+      mappingFileExists = true;
+    } catch {
+      mappingFileExists = false;
+    }
+    const pdfMatchesBuild = rec.pdfAvailable && mappingFileExists;
+    const ok = executableFound && mappingFileExists && pdfMatchesBuild;
+    return {
+      executableFound,
+      mappingFileExists,
+      pdfMatchesBuild,
+      ok,
+      ...(ok
+        ? {}
+        : {
+            reason: !mappingFileExists ? '.synctex.gz not found' : 'PDF or build state mismatch',
+            suggestion: !mappingFileExists
+              ? 'Build the project again to regenerate SyncTeX data.'
+              : 'Rebuild once more.',
+          }),
+    };
   });
 
   /**
