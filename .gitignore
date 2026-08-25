@@ -11,3 +11,4 @@ playwright-report/
 *.tsbuildinfo
 .latex-studio/
 !templates/
+tmp-perf-*/
