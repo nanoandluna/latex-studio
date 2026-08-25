@@ -209,7 +209,7 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 | Port 3210 busy | Set `PORT=<n>` env var before `pnpm start`. |
 | SyncTeX jump does nothing | `synctex` CLI missing or the build predates `-synctex=1` output — rebuild once. |
 
-## Known limitations (v0.2.2)
+## Known limitations (V0.2.x — final)
 
 - PDF search highlights matches per text-item (with cross-item joining); a match broken by hyphenation across a line end may still be missed.
 - Single workspace at a time; single user by design.
@@ -219,13 +219,13 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 ## Roadmap
 
 - ~~V0.1 — Local LaTeX Foundation~~ ✅
-- ~~V0.1.x — Hardening / Security~~ ✅ (instance-token auth, CSRF/DNS-rebinding guards, path-leak fixes)
-- ~~V0.2 — LaTeX IDE Intelligence~~ ✅ shipped in v0.2.0 — [plan](docs/V0.2-PLAN.md)
-- **V0.2.x — Real-world hardening** ← now: large-project index performance, repeated build/AutoBuild stability, Beamer & large-PDF compatibility (v0.2.1), plus feedback-driven fixes from real papers
-- **V0.3 — Research Workspace Intelligence**: persistent project intelligence (file watcher + dependency graph; symlink/junction safety treated as a first-class security concern), citation/reference/figure/table inspectors with usage stats, project diagnostics ("Research Health"), academic-writing checks (rule-based, no AI), template packages
-- **V0.3.x — SyncTeX diagnostics**: surface mapping availability/failure reasons so inverse jumps never fail silently
-- **V0.4 — AI-native LaTeX**: project-aware agent (error-fix / rewrite / explain / generate / refactor) standing on the Project Index
+- ~~V0.1.x — Security / Hardening~~ ✅ (instance-token auth · CSRF/DNS-rebinding guards · path-leak fixes)
+- ~~V0.2.0 — LaTeX IDE Intelligence~~ ✅ (Project Index · Outline · Navigator · IntelliSense 2.0 · SyncTeX bidirectional) — [plan](docs/V0.2-PLAN.md)
+- ~~V0.2.1/0.2.2 — Real-world Hardening & Audit Cleanup~~ ✅
+- **V0.2.3 — Compatibility Final** ← current: real-paper matrix closed out (BibLaTeX+biber · IEEEtran · ctexbook chapter thesis · Beamer · large PDF · 240-chapter index perf · queue & AutoBuild stability · SyncTeX repeat-loop). **V0.2.x is now frozen.**
+- **V0.3 — Research Workspace Intelligence** — [plan](docs/V0.3-PLAN.md): Project Graph (include+reference+citation edges), File Watcher (source/build roots separated; symlink/junction safety first-class), Inspectors (figure/table/citation/reference with usage stats), Project Diagnostics ("Research Health"), rule-based academic-writing checks, template packages. Persistent disk cache deferred to V0.3.1 until watcher→increment→graph proves stable. Recent-projects list ships before any multi-workspace work.
+- **V0.4 — AI-native LaTeX** — project-aware agent (error-fix / rewrite / explain / generate / refactor) standing on the Project Graph
 - **V0.5 — Engineering**: Git integration, snapshots, diff, version history
 - Beyond: remote compiler, cloud workspace, collaboration
 
-Release policy: docs-only commits no longer linger between tag and master — patches are cut promptly so `master` equals the latest release.
+Release policy: patches are cut promptly so `master` always matches the latest tag.

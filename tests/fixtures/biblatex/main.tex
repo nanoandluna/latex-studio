@@ -1,0 +1,17 @@
+\documentclass[12pt]{article}
+\usepackage[backend=biber,style=numeric,sorting=none]{biblatex}
+\addbibresource{refs.bib}
+
+\begin{document}
+
+\section{Citations in BibLaTeX}
+
+Numeric autocitation~\autocite{smith2025}.
+Text citation: \textcite{doe2024} argue the opposite.
+Parenthetical: \parencite{wang2026}.
+
+Multiple keys at once: \autocite{smith2025,doe2024,wang2026}.
+
+\printbibliography
+
+\end{document}

@@ -207,6 +207,69 @@ describe.skipIf(!RUN || availableEngines.length === 0)('real build: error fixtur
   }, 900_000);
 });
 
+describe.skipIf(!RUN || availableEngines.length === 0 || !biber)('real build: biblatex full workflow (V0.2.3)', () => {
+  it('numeric style + autocite/textcite/parencite via biber', async () => {
+    const ws = await tempWorkspace('biblatex');
+    const rec = await manager.build(ws, { mainFile: 'main.tex', compiler: availableEngines[0] as EngineChoice });
+    if (rec.status !== 'success') failWithDiagnostics('biblatex/biber', rec);
+    await assertValidPdf(ws, 'main.tex');
+    expect(rec.problems.filter((p) => p.message.includes('smith2025'))).toHaveLength(0);
+  }, 900_000);
+});
+
+describe.skipIf(!RUN || availableEngines.length === 0 || !bibtex)('real build: IEEEtran class (V0.2.3)', () => {
+  it('compiles the IEEE conference class with classic bibtex', async () => {
+    const ws = await tempWorkspace('ieee');
+    const rec = await manager.build(ws, { mainFile: 'main.tex', compiler: availableEngines[0] as EngineChoice });
+    if (rec.status !== 'success') failWithDiagnostics('ieee/bibtex', rec);
+    await assertValidPdf(ws, 'main.tex');
+    expect(rec.problems.filter((p) => p.message.includes('smith2025'))).toHaveLength(0);
+  }, 900_000);
+});
+
+describe.skipIf(!RUN || !availableEngines.includes('xelatex'))('real build: chinese thesis ctexbook (V0.2.3)', () => {
+  it('compiles chapter-level 中文论文 with figure cross-reference', async () => {
+    const ws = await tempWorkspace('chinese-thesis');
+    const rec = await manager.build(ws, { mainFile: 'main.tex', compiler: 'xelatex' });
+    if (rec.status !== 'success') failWithDiagnostics('chinese-thesis/xelatex', rec);
+    await assertValidPdf(ws, 'main.tex');
+
+    // V0.2 structure parser must capture chapter AND section levels here.
+    const { parseStructure } = await import('@latex-studio/latex-parser');
+    const mainSrc = await fs.readFile(path.join(ws, 'main.tex'), 'utf8');
+    const levels = parseStructure(mainSrc, 'main.tex').map((s) => s.level);
+    expect(levels).toContain(1); // \chapter
+    expect(levels).toContain(2); // \section
+  }, 900_000);
+});
+
+describe.skipIf(!RUN || availableEngines.length === 0)('synctex stability loop (V0.2.3)', () => {
+  it('repeated forward searches against one build return consistent pages', async () => {
+    const ws = await tempWorkspace('multi-file');
+    // one successful build to anchor all subsequent queries
+    const setup = await manager.build(ws, { mainFile: 'main.tex', compiler: availableEngines[0] as EngineChoice });
+    if (setup.status !== 'success') failWithDiagnostics('multi-file/setup', setup);
+
+    const { SyncTexService } = await import('../src/compiler/synctexService.js');
+    const svc = new SyncTexService();
+    const results: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const hit = await svc.forwardSearch(
+        ws,
+        path.join(ws, '.build'),
+        'main.tex',
+        path.join(ws, 'sections', 'method.tex'),
+        1
+      );
+      if (!hit) throw new Error(`forward search #${i + 1} returned null`);
+      results.push(hit.page);
+    }
+    expect(new Set(results).size).toBe(1); // deterministic mapping
+    expect(results[0]).toBeGreaterThan(0);
+    svc.dispose();
+  }, 300_000);
+});
+
 describe.skipIf(!RUN || availableEngines.length === 0)('real build: unicode path + spaces', () => {
   it('compiles inside 科研项目 我的论文/', async () => {
     const ws = await tempWorkspace('unicode-path', '科研项目 我的论文');
