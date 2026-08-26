@@ -37,7 +37,6 @@ export class SyncTexService {
     // MiKTeX/TeX Live match input tags against the ABSOLUTE path on Windows;
     // relative queries yield "No tag for …". The route already jail-validated
     // this absolute path via safeResolve.
-    void buildDir;
 
     const outcome = await this.processes.run(
       tool.path,

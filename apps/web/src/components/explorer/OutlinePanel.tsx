@@ -17,8 +17,6 @@ export function OutlinePanel() {
     return index.sections.map((s) => {
       counters[s.level] += 1;
       for (let i = s.level + 1; i < counters.length; i++) counters[i] = 0;
-      const num = counters.slice(0, s.level + 1).filter((n) => n > 0 || s.level === 0);
-      void num;
       const label = counters.slice(0, s.level + 1).join('.');
       return { ...s, label };
     });

@@ -28,9 +28,6 @@ export function ImageViewer({ path }: { path: string }) {
   const computeFit = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const availW = el.clientWidth - 32;
-    // Fit uses a nominal natural width; browsers scale SVG/PNG via max-width
-    void availW;
   }, []);
 
   useEffect(() => {
