@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import path from 'node:path';
-import fs from 'node:fs';
 import { listTemplates, instantiateTemplate } from '../services/templateService.js';
 import { workspaceService } from '../services/workspaceService.js';
 
@@ -47,5 +46,3 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
   });
 }
 
-// keep fs import used for the existsSync re-export guard above
-void fs;

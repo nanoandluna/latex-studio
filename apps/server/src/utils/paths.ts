@@ -71,7 +71,7 @@ export function isTextFile(name: string): boolean {
  */
 export async function safeRealpathInside(root: string, absPath: string): Promise<string> {
   const [realAbs, realRoot] = await Promise.all([fs.realpath(absPath), fs.realpath(root)]);
-  const normRoot = realRoot.replace(/[/\\\\]+\$/, '');
+  const normRoot = realRoot.replace(/[\\/]+$/, '');
   if (realAbs !== normRoot && !realAbs.startsWith(normRoot + path.sep)) {
     throw new PathTraversalError(absPath);
   }

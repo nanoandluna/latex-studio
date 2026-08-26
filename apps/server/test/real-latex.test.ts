@@ -297,10 +297,8 @@ describe.skipIf(!RUN || !availableEngines.includes('xelatex') || !biber)('real b
     expect(rec.problems.filter((p) => p.message.includes('smith2025'))).toHaveLength(0);
 
     // structure parser must capture chapter AND section levels from the graph
-    const { parseTexDocument, parseStructure } = await import('@latex-studio/latex-parser');
-    void parseTexDocument;
+    const { parseStructure } = await import('@latex-studio/latex-parser');
     const mainSrc = await fs.readFile(path.join(ws, 'main.tex'), 'utf8');
-    void mainSrc;
     const ch1 = await fs.readFile(path.join(ws, 'chapters', 'ch1.tex'), 'utf8');
     const levels = parseStructure(ch1, 'chapters/ch1.tex').map((s) => s.level);
     expect(levels).toContain(1); // \chapter

@@ -165,7 +165,6 @@ export function deriveGraphDiagnostics(index: ProjectIndex): GraphDiagnostics {
       key: arr[0].key,
     });
   }
-  const citedKeys = new Set(index.citations.map((c) => c.key));
   const definedBib = new Set(index.bibEntries.map((b) => b.key));
   for (const c of index.citations) {
     if (!definedBib.has(c.key)) {
@@ -178,7 +177,6 @@ export function deriveGraphDiagnostics(index: ProjectIndex): GraphDiagnostics {
         key: c.key,
       });
     }
-    void citedKeys;
   }
 
   // V0.3 additions

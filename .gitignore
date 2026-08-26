@@ -12,3 +12,8 @@ playwright-report/
 .latex-studio/
 !templates/
 tmp-perf-*/
+
+# local dev probes/scripts (never commit)
+probe-*.ts
+debug-*.mjs
+scripts/patch-*.mjs

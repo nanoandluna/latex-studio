@@ -1,7 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { FileNode, BibKeyEntry, LabelEntry } from '@latex-studio/shared';
-import { parseBibKeys, parseLabels } from '@latex-studio/latex-parser';
+import type { FileNode } from '@latex-studio/shared';
 import { safeResolve, isDirectory, isTextFile } from '../utils/paths.js';
 import { ApiError } from '../errors.js';
 
@@ -187,38 +186,6 @@ export class WorkspaceService {
     await scan(root, '', 0);
     found.sort((a, b) => a.depth - b.depth);
     return found[0]?.file ?? null;
-  }
-
-  /** Scan every .bib file in the workspace for citation keys. */
-  async collectBibKeys(): Promise<BibKeyEntry[]> {
-    const root = this.requireWorkspace();
-    const keys: BibKeyEntry[] = [];
-    await this.forEachFile(root, '', async (rel, abs) => {
-      if (!rel.endsWith('.bib')) return;
-      try {
-        const content = await fs.readFile(abs, 'utf8');
-        keys.push(...parseBibKeys(content, rel));
-      } catch {
-        /* ignore unreadable */
-      }
-    });
-    return keys;
-  }
-
-  /** Scan every .tex file in the workspace for \label keys. */
-  async collectLabels(): Promise<LabelEntry[]> {
-    const root = this.requireWorkspace();
-    const labels: LabelEntry[] = [];
-    await this.forEachFile(root, '', async (rel, abs) => {
-      if (!rel.endsWith('.tex')) return;
-      try {
-        const content = await fs.readFile(abs, 'utf8');
-        labels.push(...parseLabels(content, rel));
-      } catch {
-        /* ignore */
-      }
-    });
-    return labels;
   }
 
   private async forEachFile(

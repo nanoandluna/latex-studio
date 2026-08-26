@@ -187,6 +187,9 @@ pnpm release:check    # the full gate
 - `apps/server` — workspace CRUD + `/api/file/raw` routes, main-file detection, path-traversal security, process manager, build concurrency, project-index endpoints (incremental refresh, buffer updates, jail checks).
 - `tests/e2e` — specs `01`–`12`: load → open → edit → save → build → PDF → problems → outline/navigator → SyncTeX loop → tabs → workspace switch. Build-dependent specs skip loudly unless `E2E_HAS_LATEX=1`. Real build assertions verify `%PDF-` artifacts on disk.
 
+## Developer Observability
+
+`GET /api/graph/debug` (localhost only, instance-token protected) exposes the live Project Graph state — node/edge counts by kind, graph revision, schema/parser versions, last-pass phase timings and the last 10 watcher batches. The Command Palette command *"Developer: Dump Graph Debug to Output"* renders it in the Output panel for diagnosing "why didn't this reference update?" questions.
 ## Error codes
 
 All API errors are structured — the frontend never string-matches:
@@ -209,7 +212,7 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 | Port 3210 busy | Set `PORT=<n>` env var before `pnpm start`. |
 | SyncTeX jump does nothing | `synctex` CLI missing or the build predates `-synctex=1` output — rebuild once. |
 
-## Known limitations (v0.3.1)
+## Known limitations (v0.3.2)
 
 - PDF search highlights matches per text-item (with cross-item joining); a match broken by hyphenation across a line end may still be missed.
 - Single workspace at a time; single user by design.
