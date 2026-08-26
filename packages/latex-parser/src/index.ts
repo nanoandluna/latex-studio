@@ -27,3 +27,4 @@ export {
   deriveGraphDiagnostics,
   GRAPH_SCHEMA_VERSION,
 } from './graph.js';
+export { analyzeTextStatistics, type TextStatsResult } from './textStats.js';

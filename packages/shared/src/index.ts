@@ -321,3 +321,80 @@ export interface WritingDiagnostic {
   file: string;
   line: number;
 }
+
+// ---------------------------------------------------------------------------
+// V0.4 — Writer's Safety + Search
+// ---------------------------------------------------------------------------
+
+export type SnapshotReason =
+  | 'manual'
+  | 'auto'
+  | 'build-ok'
+  | 'pre-replace'
+  | 'pre-restore'
+  | 'before-import';
+
+export interface SnapshotFileEntry {
+  path: string;
+  size: number;
+  mtimeMs: number;
+  hash: string;
+}
+
+export interface SnapshotManifest {
+  version: 1;
+  snapshotId: string;
+  workspaceId: string;
+  createdAt: number;
+  reason: SnapshotReason;
+  label?: string;
+  mainFile: string;
+  fileCount: number;
+  totalBytes: number;
+  /** sha1 over sorted (relPath + ':' + fileHash) pairs */
+  contentHash: string;
+  files: SnapshotFileEntry[];
+}
+
+export interface TextStatistics {
+  cjkCharacters: number;
+  latinWords: number;
+  numericTokens: number;
+  whitespaceTokens: number;
+  visibleCharacters: number;
+  sourceCharacters: number;
+  estimatedWords: number;
+}
+
+export interface SearchOptions {
+  query: string;
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  regex?: boolean;
+  includeGlob?: string;
+  excludeGlob?: string;
+}
+
+export interface SearchMatch {
+  file: string;
+  line: number;
+  column: number;
+  preview: string;
+}
+
+export interface SearchResponse {
+  matches: SearchMatch[];
+  fileCount: number;
+  truncated: boolean;
+}
+
+export interface ReplacePlanEntry {
+  file: string;
+  replacements: number;
+}
+
+export interface ReplacePlan {
+  totalReplacements: number;
+  files: ReplacePlanEntry[];
+  snapshotId: string;
+}
