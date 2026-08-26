@@ -1,6 +1,6 @@
 {
   "name": "latex-studio",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "A lightweight local LaTeX workspace: edit, compile, preview PDF in the browser.",
   "scripts": {
@@ -9,6 +9,7 @@
     "start": "pnpm --filter @latex-studio/server start",
     "doctor": "node scripts/doctor.mjs",
     "test": "pnpm -r test",
+    "test:stress": "node scripts/run-with-env.mjs LS_STRESS=1 -- pnpm --filter @latex-studio/server exec vitest run test/performance.stress.test.ts",
     "test:latex": "node scripts/run-with-env.mjs RUN_LATEX_TESTS=1 -- pnpm --filter @latex-studio/server test",
     "test:e2e": "pnpm --filter @latex-studio/shared build && pnpm --filter @latex-studio/latex-parser build && pnpm --filter @latex-studio/web build && pnpm --filter @latex-studio/server build && playwright test -c tests/playwright.config.ts",
     "test:e2e:latex": "pnpm --filter @latex-studio/shared build && pnpm --filter @latex-studio/latex-parser build && pnpm --filter @latex-studio/web build && pnpm --filter @latex-studio/server build && node scripts/run-with-env.mjs E2E_HAS_LATEX=1 -- playwright test -c tests/playwright.config.ts",

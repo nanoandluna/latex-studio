@@ -1,4 +1,6 @@
+import fsSync from 'node:fs';
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { ProjectIndex } from '@latex-studio/shared';
 import {
@@ -12,6 +14,9 @@ import {
 import { safeResolve } from '../utils/paths.js';
 import { workspaceService } from './workspaceService.js';
 import { FileWatcher } from './fileWatcher.js';
+import { GRAPH_SCHEMA_VERSION } from '@latex-studio/latex-parser';
+
+const PARSER_VERSION = '0.3.1';
 
 interface CacheEntry {
   /** mtimeMs + size fingerprint of the file on disk at parse time */
@@ -59,6 +64,18 @@ export class ProjectIndexService {
   private pendingBufferAt = 0;
   private rev = 0;
   private watcher = new FileWatcher();
+  /** Persistent per-file parse cache: rel → { hash, parsed } (schema-gated). */
+  private diskFiles = new Map<string, { hash: string; parsed: FileParseResult }>();
+  private diskBib = new Map<string, { hash: string; entries: ReturnType<typeof parseBibDocumentEntries> }>();
+  private diskLoadedRoot: string | null = null;
+  private diskDirty = false;
+  /** Observability ring buffers / last-pass stats. */
+  private recentBatches: { at: number; paths: string[] }[] = [];
+  lastStats: {
+    startedAt: number; durationMs: number; walkMs: number; parseMs: number;
+    assembleMs: number; diagMs: number; filesParsed: number; cacheHits: number;
+    memCacheHits: number; rerun: boolean;
+  } | null = null;
 
   get version(): number {
     return this.rev;
@@ -71,7 +88,9 @@ export class ProjectIndexService {
   enableAutoRefresh(root: string): void {
     if (process.env.LS_DISABLE_WATCHER === '1') return;
     if (this.watcher.watchedRoot === root && this.watcher.active) return;
-    this.watcher.onChange = () => {
+    this.watcher.onChange = (paths) => {
+      this.recentBatches.unshift({ at: Date.now(), paths });
+      if (this.recentBatches.length > 10) this.recentBatches.pop();
       void this.refresh().catch(() => {});
     };
     this.watcher.start(root);
@@ -140,6 +159,8 @@ export class ProjectIndexService {
   private async doRefresh(): Promise<IndexRefreshResult> {
     const startedAt = Date.now();
     const root = workspaceService.requireWorkspace();
+    this.ensureDiskCache(root);
+    const walkStart = Date.now();
 
     if (this.builtForRoot !== root) {
       this.cache.clear();
@@ -152,6 +173,8 @@ export class ProjectIndexService {
     const texFiles: string[] = [];
     const bibFiles: string[] = [];
     await this.walk(root, '', texFiles, bibFiles);
+    const walkMs = Date.now() - walkStart;
+    const parseStart = Date.now();
 
     let cacheHits = 0;
     const parsed: FileParseResult[] = [];
@@ -171,7 +194,16 @@ export class ProjectIndexService {
           continue;
         }
         const content = await fs.readFile(abs, 'utf8');
+        const hash = this.sha1(content);
+        const diskHit = this.diskFiles.get(rel);
+        if (diskHit && diskHit.hash === hash) {
+          this.cache.set(rel, { mtimeMs: stat.mtimeMs, size: stat.size, parsed: diskHit.parsed });
+          parsed.push(diskHit.parsed);
+          continue;
+        }
         parsed.push(this.parseWithCache(rel, content, stat.mtimeMs, stat.size));
+        this.diskFiles.set(rel, { hash, parsed: parsed[parsed.length - 1] });
+        this.diskDirty = true;
       } catch {
         /* unreadable/deleted mid-scan → skip file */
       }
@@ -191,7 +223,14 @@ export class ProjectIndexService {
           continue;
         }
         const content = await fs.readFile(abs, 'utf8');
-        const entries = parseBibDocumentEntries(content, rel);
+        const hash = this.sha1(content);
+        const diskHit = this.diskBib.get(rel);
+        let entries = diskHit?.hash === hash ? diskHit.entries : undefined;
+        if (!entries) {
+          entries = parseBibDocumentEntries(content, rel);
+          this.diskBib.set(rel, { hash, entries });
+          this.diskDirty = true;
+        }
         this.bibCache.set(rel, { mtimeMs: stat.mtimeMs, size: stat.size, entries });
         bibParsed.push({ file: rel, entries });
       } catch {
@@ -232,8 +271,101 @@ export class ProjectIndexService {
     // A buffer landed after this pass started → exactly one extra pass so the
     // committed graph includes it. Bounded to avoid livelock.
     const rerun = this.pendingBufferAt > startedAt;
+    const parseMs = Date.now() - parseStart;
+    this.lastStats = { startedAt, durationMs: Date.now() - startedAt, walkMs, parseMs, assembleMs: 0, diagMs: 0, filesParsed: parsed.length, cacheHits, memCacheHits: cacheHits, rerun };
     if (!rerun) this.pendingBufferAt = 0;
+    this.persistDiskCacheIfDirty();
     return { index, filesParsed: parsed.length, cacheHits, durationMs: Date.now() - startedAt, rerun };
+  }
+
+  private sha1(s: string): string {
+    return createHash('sha1').update(s, 'utf8').digest('hex');
+  }
+
+  /** Persistent per-file cache lives inside the workspace (.latex-studio/) —
+   *  automatically per-project and gitignored. Schema/parser version mismatch
+   *  or corruption discards it (auto-rebuild). */
+  private ensureDiskCache(root: string): void {
+    if (this.diskLoadedRoot === root) return;
+    this.diskFiles.clear();
+    this.diskBib.clear();
+    this.diskLoadedRoot = root;
+    this.diskDirty = false;
+    try {
+      const p = this.diskCachePath(root);
+      const raw = JSON.parse(fsSync.readFileSync(p, 'utf8')) as {
+        schemaVersion?: number;
+        parserVersion?: string;
+        files?: Record<string, { hash: string; parsed: FileParseResult }>;
+        bib?: Record<string, { hash: string; entries: unknown }>;
+      };
+      if (raw.schemaVersion !== GRAPH_SCHEMA_VERSION || raw.parserVersion !== PARSER_VERSION) return;
+      for (const [rel, v] of Object.entries(raw.files ?? {})) {
+        if (v?.hash && v?.parsed) this.diskFiles.set(rel, { hash: v.hash, parsed: v.parsed });
+      }
+      for (const [rel, v] of Object.entries(raw.bib ?? {})) {
+        if (v?.hash && Array.isArray(v.entries)) {
+          this.diskBib.set(rel, { hash: v.hash, entries: v.entries as ReturnType<typeof parseBibDocumentEntries> });
+        }
+      }
+    } catch {
+      /* missing/corrupt → clean rebuild */
+    }
+  }
+
+  private diskCachePath(root: string): string {
+    return path.join(root, '.latex-studio', 'cache', `fileparse-v${GRAPH_SCHEMA_VERSION}.json`);
+  }
+
+  /** Best-effort write-behind; corruption on next load → clean rebuild. */
+  private persistDiskCacheIfDirty(): void {
+    if (!this.diskDirty || !this.builtForRoot) return;
+    try {
+      const p = this.diskCachePath(this.builtForRoot);
+      fsSync.mkdirSync(path.dirname(p), { recursive: true });
+      const payload = {
+        schemaVersion: GRAPH_SCHEMA_VERSION,
+        parserVersion: PARSER_VERSION,
+        savedAt: Date.now(),
+        files: Object.fromEntries(this.diskFiles),
+        bib: Object.fromEntries(this.diskBib),
+      };
+      fsSync.writeFileSync(p, JSON.stringify(payload));
+      this.diskDirty = false;
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  getDebugInfo() {
+    const idx = this.current;
+    const edgesByKind: Record<string, number> = {};
+    const edges = (idx as unknown as { edges?: { kind: string }[] })?.edges ?? [];
+    for (const e of edges) edgesByKind[e.kind] = (edgesByKind[e.kind] ?? 0) + 1;
+    return {
+      schemaVersion: GRAPH_SCHEMA_VERSION,
+      parserVersion: PARSER_VERSION,
+      rev: this.rev,
+      builtForRoot: this.builtForRoot,
+      nodes: {
+        files: idx?.files.length ?? 0,
+        sections: idx?.sections.length ?? 0,
+        labels: idx?.labels.length ?? 0,
+        references: idx?.references.length ?? 0,
+        citations: idx?.citations.length ?? 0,
+        figures: idx?.figures.length ?? 0,
+        tables: idx?.tables.length ?? 0,
+        equations: idx?.equations.length ?? 0,
+        packages: idx?.packages.length ?? 0,
+        bibEntries: idx?.bibEntries.length ?? 0,
+      },
+      edges: edgesByKind,
+      lastPass: this.lastStats,
+      recentBatches: this.recentBatches.slice(-10),
+      watcherActive: this.watcherActive,
+      watchedRoot: this.watcher.watchedRoot,
+      diskCache: { entries: this.diskFiles.size + this.diskBib.size, dirty: this.diskDirty },
+    };
   }
 
   private parseWithCache(rel: string, content: string, mtimeMs: number, size: number): FileParseResult {

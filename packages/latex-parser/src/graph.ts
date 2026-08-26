@@ -1,5 +1,9 @@
 import type { ProjectEdge, ProjectIndex } from '@latex-studio/shared';
 
+/** Bump whenever the derived graph shape/diagnostic rules change. A mismatch
+ *  invalidates any persisted cache and forces a full rebuild. */
+export const GRAPH_SCHEMA_VERSION = 1;
+
 /**
  * V0.3 Project Graph — query layer over the assembled project index.
  *

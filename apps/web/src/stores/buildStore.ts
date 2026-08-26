@@ -33,6 +33,7 @@ interface BuildState {
   refreshLatest: () => Promise<void>;
   cancel: () => Promise<void>;
   clearLog: () => void;
+  setLog: (log: string) => void;
   reset: () => void;
 }
 
@@ -106,6 +107,7 @@ export const useBuildStore = create<BuildState>()((set, get) => ({
   },
 
   clearLog: () => set({ log: '' }),
+  setLog: (log) => set({ log }),
 
   reset: () =>
     set({

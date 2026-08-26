@@ -241,6 +241,9 @@ export interface ProjectIndex {
   equations: EquationEntry[];
   packages: PackageEntry[];
   includes: IncludeEdge[];
+  /** V0.3.1 — stamped by the indexer; drives persistent-cache invalidation */
+  schemaVersion?: number;
+  parserVersion?: string;
   graphicsPaths: GraphicsPathEntry[];
   edges?: ProjectEdge[];
   version?: number;

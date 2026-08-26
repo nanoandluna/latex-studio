@@ -25,4 +25,5 @@ export {
   ProjectGraphQuery,
   deriveEdges,
   deriveGraphDiagnostics,
+  GRAPH_SCHEMA_VERSION,
 } from './graph.js';

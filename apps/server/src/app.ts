@@ -51,6 +51,12 @@ export async function createApp() {
   await registerAuthRoutes(app, instanceToken);
   await registerIndexRoutes(app);
   await registerTemplateRoutes(app);
+
+  // V0.3.1 developer observability: Project Graph Inspector dump.
+  app.get('/api/graph/debug', async () => {
+    const { projectIndexService } = await import('./services/projectIndexService.js');
+    return projectIndexService.getDebugInfo();
+  });
   await registerHealthRoutes(app);
   await registerEnvRoutes(app);
   await registerWorkspaceRoutes(app);

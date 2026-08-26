@@ -288,6 +288,26 @@ describe.skipIf(!RUN || availableEngines.length === 0)('real build: beamer', () 
   }, 900_000);
 });
 
+describe.skipIf(!RUN || !availableEngines.includes('xelatex') || !biber)('real build: research thesis (V0.3.1)', () => {
+  it('ctexbook + biblatex/biber + chapter structure + figure refs', async () => {
+    const ws = await tempWorkspace('research-thesis');
+    const rec = await manager.build(ws, { mainFile: 'main.tex', compiler: 'xelatex' });
+    if (rec.status !== 'success') failWithDiagnostics('research-thesis/xelatex+biber', rec);
+    await assertValidPdf(ws, 'main.tex');
+    expect(rec.problems.filter((p) => p.message.includes('smith2025'))).toHaveLength(0);
+
+    // structure parser must capture chapter AND section levels from the graph
+    const { parseTexDocument, parseStructure } = await import('@latex-studio/latex-parser');
+    void parseTexDocument;
+    const mainSrc = await fs.readFile(path.join(ws, 'main.tex'), 'utf8');
+    void mainSrc;
+    const ch1 = await fs.readFile(path.join(ws, 'chapters', 'ch1.tex'), 'utf8');
+    const levels = parseStructure(ch1, 'chapters/ch1.tex').map((s) => s.level);
+    expect(levels).toContain(1); // \chapter
+    expect(levels).toContain(2); // \section
+  }, 900_000);
+});
+
 describe.skipIf(!RUN || availableEngines.length === 0)('real build: large PDF (V0.2.1)', () => {
   it('builds a ~120-page document and the PDF reports its page count', async () => {
     const ws = await fs.mkdtemp(path.join(os.tmpdir(), 'lstudio-bigpdf-'));

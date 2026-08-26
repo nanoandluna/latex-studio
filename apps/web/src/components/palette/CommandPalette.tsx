@@ -60,6 +60,37 @@ export function CommandPalette() {
       { id: 'toggle-explorer', label: 'Toggle Explorer', run: () => ui.toggleExplorer() },
       { id: 'reload', label: 'Reload Workspace Tree', run: () => void workspace.refreshTree() },
       { id: 'detect-main', label: 'Re-detect Main File', run: () => void workspace.detectMainFile().then((f) => f && workspace.setMainFile(f)) },
+      {
+        id: 'graph-debug',
+        label: 'Developer: Dump Graph Debug to Output',
+        run: async () => {
+          try {
+            const res = await fetch('/api/graph/debug');
+            const info = (await res.json()) as {
+              nodes: Record<string, number>;
+              edges: Record<string, number>;
+              rev: number;
+              schemaVersion: number;
+              parserVersion: string;
+              lastPass: unknown;
+              recentBatches: unknown[];
+            };
+            const lines = [
+              'Graph Debug',
+              '─────────────',
+              `Nodes: ${JSON.stringify(info.nodes)}`,
+              `Edges: ${JSON.stringify(info.edges)}`,
+              `Rev: ${info.rev} · schema v${info.schemaVersion} · parser ${info.parserVersion}`,
+              `Last pass: ${JSON.stringify(info.lastPass)}`,
+              `Recent batches: ${JSON.stringify(info.recentBatches)}`,
+            ];
+            useBuildStore.getState().setLog(lines.join('\n'));
+            useUiStore.getState().setBottomTab('output');
+          } catch (e) {
+            console.error('graph debug failed', e);
+          }
+        },
+      },
     ];
     for (const c of ['auto', 'latexmk', 'xelatex', 'pdflatex', 'lualatex'] as CompilerChoice[]) {
       cmds.push({

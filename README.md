@@ -209,7 +209,7 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 | Port 3210 busy | Set `PORT=<n>` env var before `pnpm start`. |
 | SyncTeX jump does nothing | `synctex` CLI missing or the build predates `-synctex=1` output — rebuild once. |
 
-## Known limitations (v0.3.0)
+## Known limitations (v0.3.1)
 
 - PDF search highlights matches per text-item (with cross-item joining); a match broken by hyphenation across a line end may still be missed.
 - Single workspace at a time; single user by design.
@@ -220,11 +220,11 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 
 - ~~V0.1 — Local LaTeX Foundation~~ ✅
 - ~~V0.1.x — Security / Hardening~~ ✅ (instance-token auth · CSRF/DNS-rebinding guards · path-leak fixes)
-- ~~V0.2.0 — LaTeX IDE Intelligence~~ ✅ (Project Index · Outline · Navigator · IntelliSense 2.0 · SyncTeX bidirectional) — [plan](docs/V0.2-PLAN.md)
-- ~~V0.2.1/0.2.2 — Real-world Hardening & Audit Cleanup~~ ✅
-- **V0.2.3 — Compatibility Final** ← current: real-paper matrix closed out (BibLaTeX+biber · IEEEtran · ctexbook chapter thesis · Beamer · large PDF · 240-chapter index perf · queue & AutoBuild stability · SyncTeX repeat-loop). **V0.2.x is now frozen.**
-- **V0.3 — Research Workspace Intelligence** — [plan](docs/V0.3-PLAN.md): Project Graph (include+reference+citation edges), File Watcher (source/build roots separated; symlink/junction safety first-class), Inspectors (figure/table/citation/reference with usage stats), Project Diagnostics ("Research Health"), rule-based academic-writing checks, template packages. Persistent disk cache deferred to V0.3.1 until watcher→increment→graph proves stable. Recent-projects list ships before any multi-workspace work.
-- **V0.4 — AI-native LaTeX** — project-aware agent (error-fix / rewrite / explain / generate / refactor) standing on the Project Graph
+- ~~V0.2.0 — LaTeX IDE Intelligence~~ ✅ — [plan](docs/V0.2-PLAN.md)
+- ~~V0.2.3 — Compatibility Final~~ ✅ V0.2.x frozen
+- ~~V0.3.0 — Research Workspace Intelligence~~ ✅ shipped: Project Graph · File Watcher · Inspectors · Diagnostics ("Research Health") · Writing checks · Recent projects · Template packages — [plan](docs/V0.3-PLAN.md)
+- ~~V0.3.1 — Intelligence Hardening~~ ✅ shipped: GRAPH_SCHEMA_VERSION versioning · persistent per-file parse cache (.latex-studio/, schema-gated, corruption auto-rebuild) · stress benchmarks 500/1000 files via `pnpm test:stress` · Graph Debug observability (`GET /api/graph/debug` + palette dump) · research-thesis real fixture
+- **V0.4 — Research Copilot**: project-aware AI (error-fix / rewrite / explain / generate / refactor) standing on the Project Graph
 - **V0.5 — Engineering**: Git integration, snapshots, diff, version history
 - Beyond: remote compiler, cloud workspace, collaboration
 
