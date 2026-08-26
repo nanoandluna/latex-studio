@@ -2,7 +2,8 @@
 
 A lightweight **local-first** LaTeX workspace: open a local `.tex` project in your browser, edit it with Monaco, compile with your local TeX distribution (XeLaTeX / pdfLaTeX / LuaLaTeX / latexmk), preview the PDF live, and jump between source and PDF.
 
-> Local-first + Web UI + **LaTeX IDE** + PDF Preview — no cloud, no accounts, fully offline.
+> **面向研究生与科研人员的本地优先科研写作工作台。**
+> Local-first research writing workspace for graduate students and researchers — edit · compile · cite · inspect · preview. Offline, no cloud, no accounts.
 
 ![LaTeX Studio — workspace with editor and PDF preview](docs/images/app.png)
 
@@ -222,13 +223,15 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 ## Roadmap
 
 - ~~V0.1 — Local LaTeX Foundation~~ ✅
-- ~~V0.1.x — Security / Hardening~~ ✅ (instance-token auth · CSRF/DNS-rebinding guards · path-leak fixes)
-- ~~V0.2.0 — LaTeX IDE Intelligence~~ ✅ — [plan](docs/V0.2-PLAN.md)
-- ~~V0.2.3 — Compatibility Final~~ ✅ V0.2.x frozen
-- ~~V0.3.0 — Research Workspace Intelligence~~ ✅ shipped: Project Graph · File Watcher · Inspectors · Diagnostics ("Research Health") · Writing checks · Recent projects · Template packages — [plan](docs/V0.3-PLAN.md)
-- ~~V0.3.1 — Intelligence Hardening~~ ✅ shipped: GRAPH_SCHEMA_VERSION versioning · persistent per-file parse cache (.latex-studio/, schema-gated, corruption auto-rebuild) · stress benchmarks 500/1000 files via `pnpm test:stress` · Graph Debug observability (`GET /api/graph/debug` + palette dump) · research-thesis real fixture
-- **V0.4 — Research Copilot**: project-aware AI (error-fix / rewrite / explain / generate / refactor) standing on the Project Graph
-- **V0.5 — Engineering**: Git integration, snapshots, diff, version history
-- Beyond: remote compiler, cloud workspace, collaboration
+- ~~V0.1.x — Security / Hardening~~ ✅
+- ~~V0.2.x — LaTeX IDE Intelligence · Real-world Hardening · Audit Cleanup~~ ✅
+- ~~V0.3.x — Research Workspace Intelligence · Intelligence Hardening~~ ✅ — [plan](docs/V0.3-PLAN.md)
+- **V0.4.0 — Writer's Safety + Search** ← next — [plan](docs/V0.4-PLAN.md)：Snapshot/History/Diff/Restore · Project Search & Replace（Replace All 自动快照）· Paper Statistics（CJK 双轨计数）· Auto-save · ZIP 导出导入
+- **V0.4.1 — Hardening**: SSE Build Progress · large-project polish · crash/recovery 回归
+- **V0.5.0 — Research Writing Workspace**: Citation Workspace · Terminology Consistency/Glossary · PDF 缩略图与阅读位置记忆 · 中文界面
+- **V0.6.0 — Literature Bridge**: Zotero / Better BibTeX 工作流深化 · 文献 PDF 阅读
+- **V0.7.0 — Long-term Reliability**: 快照格式演进 · 迁移 · 备份恢复加固
+- **V1.0 — Graduate Research Workspace**
 
-Release policy: patches are cut promptly so `master` always matches the latest tag.
+Product razor: 只做让研究生更快、更稳定、更清晰地完成一篇高质量论文的功能。
+
