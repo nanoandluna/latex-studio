@@ -216,7 +216,7 @@ Build lifecycle states surfaced in the UI: `Ready → Building… → Build succ
 
 - PDF search highlights matches per text-item (with cross-item joining); a match broken by hyphenation across a line end may still be missed.
 - Single workspace at a time; single user by design.
-- The project index lives in memory for the server session — it rebuilds in well under a second on open, so no on-disk cache is persisted.
+- Per-file parse results persist in `.latex-studio/cache/` (schema-gated, content-hash keyed, corruption auto-rebuilds); the assembled graph itself is rebuilt in memory each session — sub-second even at 240 chapters.
 - Spell/grammar checking is not provided.
 
 ## Roadmap
