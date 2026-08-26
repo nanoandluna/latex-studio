@@ -11,7 +11,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
   app.post('/api/workspace/open', async (req, reply) => {
     const { path: dir } = (req.body ?? {}) as { path?: string };
     if (!dir || typeof dir !== 'string') {
-      return reply.code(400).send({ error: 'Missing workspace path' });
+      return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing workspace path' } });
     }
     const opened = await workspaceService.open(dir);
     recordRecent(opened.path);

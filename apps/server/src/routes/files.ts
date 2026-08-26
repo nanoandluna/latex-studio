@@ -18,7 +18,7 @@ const MIME_BY_EXT: Record<string, string> = {
 export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/file/read', async (req, reply) => {
     const { path: rel } = req.query as { path?: string };
-    if (!rel) return reply.code(400).send({ error: 'Missing path' });
+    if (!rel) return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing path' } });
     try {
       return { path: rel, content: await workspaceService.readFile(rel) };
     } catch (err) {
@@ -30,7 +30,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/file/raw', async (req, reply) => {
     const root = workspaceService.requireWorkspace();
     const { path: rel } = req.query as { path?: string };
-    if (!rel) return reply.code(400).send({ error: 'Missing path' });
+    if (!rel) return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing path' } });
     try {
       const abs = safeResolve(root, rel);
       // V0.3 boundary hardening: follow the real path (through any symlink/
@@ -56,7 +56,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/file/save', async (req, reply) => {
     const { path: rel, content } = (req.body ?? {}) as { path?: string; content?: string };
     if (!rel || typeof content !== 'string') {
-      return reply.code(400).send({ error: 'Missing path or content' });
+      return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing path or content' } });
     }
     try {
       await workspaceService.saveFile(rel, content);
@@ -75,7 +75,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
       type?: 'file' | 'directory';
       content?: string;
     };
-    if (!rel) return reply.code(400).send({ error: 'Missing path' });
+    if (!rel) return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing path' } });
     try {
       if (type === 'directory') {
         await workspaceService.createDirectory(rel);
@@ -90,7 +90,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/file/delete', async (req, reply) => {
     const { path: rel } = (req.body ?? {}) as { path?: string };
-    if (!rel) return reply.code(400).send({ error: 'Missing path' });
+    if (!rel) return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing path' } });
     try {
       await workspaceService.deleteEntry(rel);
       projectIndexService.dropBuffer(rel);
@@ -102,7 +102,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/file/rename', async (req, reply) => {
     const { from, to } = (req.body ?? {}) as { from?: string; to?: string };
-    if (!from || !to) return reply.code(400).send({ error: 'Missing from/to' });
+    if (!from || !to) return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing from/to' } });
     try {
       await workspaceService.renameEntry(from, to);
       projectIndexService.dropBuffer(from);
