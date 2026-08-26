@@ -17,3 +17,7 @@ tmp-perf-*/
 probe-*.ts
 debug-*.mjs
 scripts/patch-*.mjs
+
+# one-off dev scripts (never commit)
+scripts/ui-*
+scripts/v0*
