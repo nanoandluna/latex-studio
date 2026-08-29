@@ -3,7 +3,7 @@ import type { LatexEnvironment } from '@latex-studio/shared';
 import { api } from '../../api/client';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useBuildStore } from '../../stores/buildStore';
-import { useSettingsStore, type CompilerChoice } from '../../stores/settingsStore';
+import { useSettingsStore, type CompilerChoice, type AutoSavePolicy } from '../../stores/settingsStore';
 import { useUiStore } from '../../stores/uiStore';
 
 const COMPILERS: CompilerChoice[] = ['auto', 'latexmk', 'xelatex', 'pdflatex', 'lualatex'];
@@ -23,6 +23,10 @@ export function Header() {
   const setCompiler = useSettingsStore((s) => s.setCompiler);
   const autoCompile = useSettingsStore((s) => s.autoCompile);
   const setAutoCompile = useSettingsStore((s) => s.setAutoCompile);
+  const autoSave = useSettingsStore((s) => s.autoSave);
+  const setAutoSave = useSettingsStore((s) => s.setAutoSave);
+  const autoSnapshot = useSettingsStore((s) => s.autoSnapshot);
+  const setAutoSnapshot = useSettingsStore((s) => s.setAutoSnapshot);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const status = useBuildStore((s) => s.status);
@@ -95,6 +99,29 @@ export function Header() {
       >
         <input type="checkbox" checked={autoCompile} onChange={(e) => setAutoCompile(e.target.checked)} />
         Auto Compile
+      </label>
+
+      <select
+        value={autoSave}
+        onChange={(e) => setAutoSave(e.target.value as AutoSavePolicy)}
+        className="hidden rounded border border-zinc-200 bg-transparent px-1.5 py-0.5 text-xs outline-none focus:border-blue-500 md:block dark:border-zinc-700"
+        title="Auto-save dirty files: off / every 30 seconds / when the window loses focus"
+      >
+        <option value="off">Auto save: Off</option>
+        <option value="interval">Auto save: 30 s</option>
+        <option value="focus-loss">Auto save: On blur</option>
+      </select>
+
+      <label
+        className="hidden cursor-pointer items-center gap-1 text-xs text-zinc-500 select-none md:flex"
+        title="When the window loses focus with unsaved edits, take an `auto` snapshot (see History)"
+      >
+        <input
+          type="checkbox"
+          checked={autoSnapshot}
+          onChange={(e) => setAutoSnapshot(e.target.checked)}
+        />
+        Snap on blur
       </label>
 
       <EnvBadge />

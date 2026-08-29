@@ -4,7 +4,18 @@ import type {
   BibKeyEntry,
   LabelEntry,
   LatexEnvironment,
+  ProjectImportResult,
   ProjectIndex,
+  ReplaceApplyRequest,
+  ReplaceApplyResponse,
+  ReplacePreviewRequest,
+  ReplacePreviewResponse,
+  SearchOptions,
+  SearchResponse,
+  SnapshotDiffEntry,
+  SnapshotManifest,
+  SnapshotReason,
+  StatisticsResponse,
 } from '@latex-studio/shared';
 
 export interface ApiErrorShape {
@@ -200,4 +211,84 @@ export const api = {
 
   buildLog: (buildId: string) =>
     request<{ log: string }>(`/api/build/${buildId}/log`),
+
+  // ---- V0.4: Search & Replace ----
+  search: (opts: SearchOptions) =>
+    request<SearchResponse & { searchedFiles: number; durationMs: number }>('/api/search', {
+      method: 'POST',
+      body: JSON.stringify(opts),
+    }),
+
+  previewReplace: (opts: ReplacePreviewRequest) =>
+    request<ReplacePreviewResponse>('/api/search/replace/preview', {
+      method: 'POST',
+      body: JSON.stringify(opts),
+    }),
+
+  applyReplace: (opts: ReplaceApplyRequest) =>
+    request<ReplaceApplyResponse>('/api/search/replace/apply', {
+      method: 'POST',
+      body: JSON.stringify(opts),
+    }),
+
+  // ---- V0.4: Snapshots ----
+  listSnapshots: () => request<SnapshotManifest[]>('/api/workspace/snapshots'),
+
+  createSnapshot: (reason: SnapshotReason, label?: string) =>
+    request<SnapshotManifest & { skipped?: boolean }>('/api/workspace/snapshots', {
+      method: 'POST',
+      body: JSON.stringify({ reason, ...(label ? { label } : {}) }),
+    }),
+
+  snapshotDiff: (id: string) =>
+    request<{ snapshotId: string; entries: SnapshotDiffEntry[] }>(
+      `/api/workspace/snapshots/${encodeURIComponent(id)}/diff`
+    ),
+
+  snapshotFileDiff: (id: string, path: string) =>
+    request<{ snapshotId: string; path: string; original: string; modified: string }>(
+      `/api/workspace/snapshots/${encodeURIComponent(id)}/diff/file?path=${encodeURIComponent(path)}`
+    ),
+
+  restoreSnapshot: (id: string, files?: string[]) =>
+    request<{
+      ok: boolean;
+      restoredFiles: number;
+      removedFiles: number;
+      preRestoreSnapshotId: string;
+      failed: string[];
+    }>(`/api/workspace/snapshots/${encodeURIComponent(id)}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ ...(files ? { files } : {}) }),
+    }),
+
+  deleteSnapshot: (id: string) =>
+    request<{ ok: boolean }>(`/api/workspace/snapshots/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  // ---- V0.4: Statistics ----
+  statistics: () => request<StatisticsResponse>('/api/statistics'),
+
+  // ---- V0.4: Project ZIP ----
+  exportProjectUrl: () => '/api/project/export',
+
+  /** Raw bytes go straight out; auth header is attached by authedFetch. */
+  importProject: async (file: File, merge: boolean) => {
+    const res = await authedFetch(`/api/project/import${merge ? '?merge=true' : ''}`, {
+      method: 'POST',
+      body: file,
+      headers: { 'Content-Type': 'application/zip' },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const shaped = (body as { error?: ApiErrorShape }).error;
+      const e = new Error(shaped?.message ?? `${res.status} ${res.statusText}`) as Error & {
+        code?: string;
+      };
+      e.code = shaped?.code ?? 'IMPORT_FAILED';
+      throw e;
+    }
+    return body as ProjectImportResult;
+  },
 };

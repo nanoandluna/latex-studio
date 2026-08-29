@@ -4,33 +4,30 @@ import type {
   SnapshotManifest,
   SnapshotReason,
   SnapshotFileEntry,
+  SnapshotDiffEntry,
 } from '@latex-studio/shared';
 import { safeResolve, safeRealpathInside } from '../utils/paths.js';
 import { workspaceService } from './workspaceService.js';
+import { collectSourceFiles } from '../utils/walkWorkspace.js';
 import { SnapshotStore } from './snapshots/snapshotStore.js';
-
-export interface SnapshotDiffEntry {
-  path: string;
-  status: 'M' | 'A' | 'D';
-  /** content of the file in the snapshot (text files only) */
-  snapshotContent?: string;
-  /** current workspace content (text files only; undefined = deleted on disk) */
-  currentContent?: string;
-  binary: boolean;
-}
+import { projectIndexService } from './projectIndexService.js';
 
 const BINARY_RE = /\.(png|jpe?g|gif|svg|pdf|zip|bmp|webp)$/i;
-const MAX_DIFF_CONTENT = 512 * 1024;
+
+/** V0.4-PLAN 1.3 retention: 24h keep-all, then daily coalesce, 30 total, 30 days. */
+const RETENTION = { maxCount: 30, maxAgeDays: 30 };
 
 /**
- * SnapshotService — create / list / diff / restore / delete snapshots.
+ * SnapshotService — the single implementation behind snapshot, history, diff
+ * and restore. Routes are a thin HTTP layer over this class.
  *
  * Safety rules enforced here:
  *  - every manifest path is re-validated through the jail before any
  *    filesystem operation
- *  - restore ALWAYS writes a `before-restore` safety snapshot first
- *  - restore removes only tracked source files that disappear; unknown
- *    paths are skipped
+ *  - restore ALWAYS writes a `pre-restore` safety snapshot first, and aborts
+ *    if that safety net cannot be captured
+ *  - restore removes only tracked source files that are absent from the
+ *    snapshot; unknown paths are never touched
  */
 export class SnapshotService {
   private storeOf(root: string) {
@@ -41,63 +38,51 @@ export class SnapshotService {
     return this.storeOf(root);
   }
 
-  /** Source file set for a snapshot: same walk the indexer uses. */
-  async collectSourceFiles(root: string): Promise<string[]> {
-    const out: string[] = [];
-    const walk = async (absDir: string, relDir: string): Promise<void> => {
-      let entries;
-      try {
-        entries = await fsp.readdir(absDir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const e of entries) {
-        if (e.isSymbolicLink()) continue; // jail: never follow links
-        if (
-          e.name.startsWith('.') ||
-          e.name === 'node_modules' ||
-          e.name === '.build' ||
-          e.name === '.latex-studio'
-        ) {
-          continue;
-        }
-        const rel = relDir ? `${relDir}/${e.name}` : e.name;
-        if (e.isDirectory()) {
-          await walk(path.join(absDir, e.name), rel);
-        } else if (e.isFile()) {
-          // skip LaTeX build artifacts even outside .build
-          if (/\.(aux|log|fls|fdb_latexmk|synctex\.gz|synctex\.busy|bbl|bcf|run\.xml|out|toc|lof|lot|blg|xdv)$/i.test(e.name)) {
-            continue;
-          }
-          out.push(rel);
-        }
-      }
-    };
-    await walk(root, '');
-    return out.sort();
-  }
-
+  /**
+   * Create a snapshot of the current workspace.
+   *
+   * Returns the manifest plus `skipped`, which is true when the content hash
+   * matches the newest snapshot and nothing was written.
+   */
   async create(
     reason: SnapshotReason,
     label?: string,
-    maxCount = 30
-  ): Promise<SnapshotManifest> {
+    opts: { maxCount?: number; maxAgeDays?: number } = {}
+  ): Promise<{ manifest: SnapshotManifest; skipped: boolean }> {
     const root = workspaceService.requireWorkspace();
-    const mainFile = await workspaceService.detectMainFile().catch(() => 'main.tex');
-    const files = await this.collectSourceFiles(root);
+    const mainFile = (await workspaceService.detectMainFile().catch(() => null)) ?? 'main.tex';
+    const files = await collectSourceFiles(root);
 
     const store = this.storeFor(root);
-    const manifest = await store.create({
-      reason,
-      ...(label ? { label } : {}),
-      mainFile: mainFile ?? 'main.tex',
-      files,
-      readContent: async (abs) => fsp.readFile(abs),
-    });
+    // Snapshotting writes one copy of every source file. With the watcher live
+    // each of those writes is taxed by the OS change feed, which alone pushed
+    // a 1000-file pre-replace snapshot far past the Replace All budget. The
+    // snapshot tree is index-invisible anyway, so events during the write are
+    // dropped rather than processed.
+    projectIndexService.suspendWatcher();
+    let result: { manifest: SnapshotManifest; skipped: boolean };
+    try {
+      result = await store.create({
+        reason,
+        ...(label ? { label } : {}),
+        mainFile,
+        files,
+        // rel is workspace-relative; resolving it through the jail keeps reads
+        // independent of process.cwd()
+        readContent: (rel) => fsp.readFile(safeResolve(root, rel)),
+        skipIfUnchanged: true,
+      });
 
-    const kept = await store.prune({ maxCount });
-    void kept;
-    return manifest;
+      if (!result.skipped) {
+        await store.prune({
+          maxCount: opts.maxCount ?? RETENTION.maxCount,
+          maxAgeDays: opts.maxAgeDays ?? RETENTION.maxAgeDays,
+        });
+      }
+    } finally {
+      projectIndexService.resumeWatcher();
+    }
+    return result;
   }
 
   async list(): Promise<SnapshotManifest[]> {
@@ -128,7 +113,7 @@ export class SnapshotService {
     const snapFiles = new Map<string, SnapshotFileEntry>();
     for (const f of m.files) snapFiles.set(f.path, f);
 
-    const currentFiles = new Set(await this.collectSourceFiles(root));
+    const currentFiles = new Set(await collectSourceFiles(root));
     const allPaths = [...new Set([...snapFiles.keys(), ...currentFiles])].sort();
 
     const out: SnapshotDiffEntry[] = [];
@@ -177,14 +162,13 @@ export class SnapshotService {
       await safeRealpathInside(root, abs);
       let original = '';
       try {
-        const store = this.storeFor(root);
-        original = (await store.readFile(id, rel)).toString('utf8');
+        original = (await this.storeFor(root).readFile(id, rel)).toString('utf8');
       } catch {
         /* not in snapshot → new file */
       }
       let modified = '';
       try {
-        modified = await fsp.readFile(safeResolve(root, rel), 'utf8');
+        modified = await fsp.readFile(abs, 'utf8');
       } catch {
         /* deleted on disk */
       }
@@ -197,9 +181,11 @@ export class SnapshotService {
 
   /**
    * Restore a snapshot into the workspace.
-   * Hard flow: pre-restore snapshot → validate all paths → apply atomically
-   * per-file (best-effort rollback via pre-restore snapshot on failure) →
-   * report. Caller is responsible for triggering graph refresh afterwards.
+   *
+   * Hard flow: pre-restore snapshot → validate every path → apply per file →
+   * report. A partial failure is reported through `failed` rather than being
+   * swallowed, so the caller can tell the user exactly what did not come back.
+   * Caller is responsible for triggering a graph refresh afterwards.
    */
   async restore(
     id: string,
@@ -208,6 +194,7 @@ export class SnapshotService {
     restoredFiles: number;
     removedFiles: number;
     preRestoreSnapshotId: string;
+    failed: string[];
   }> {
     const root = workspaceService.requireWorkspace();
     const m = await this.get(id);
@@ -215,45 +202,62 @@ export class SnapshotService {
 
     const wanted = opts.files && opts.files.length > 0 ? new Set(opts.files) : null;
 
-    // 1) safety net: capture the current state first
-    const currentFiles = await this.collectSourceFiles(root);
-    const pre = await this.create('pre-restore', `before restore ${id}`);
-    void pre;
+    // 1) safety net: capture the current state before anything is overwritten
+    const { manifest: pre } = await this.create('pre-restore', `before restore ${id}`);
 
-    // 2) remove workspace files that are NOT part of the snapshot
-    //    (only among collectible source files — never touch anything else)
+    // Bulk restore: watcher suspended for the same reason as in create(). The
+    // caller (route layer) refreshes the index explicitly afterwards.
+    projectIndexService.suspendWatcher();
+
     let removedFiles = 0;
-    for (const rel of currentFiles) {
-      if (!m.files.some((f) => f.path === rel)) {
-        try {
-          const abs = safeResolve(root, rel);
-          await fsp.rm(abs, { force: true });
-          removedFiles++;
-        } catch {
-          /* ignore */
+    let restoredFiles = 0;
+    const failed: string[] = [];
+    try {
+      // 2) remove workspace source files that are NOT part of the snapshot
+      //    (only among collectible source files — never touch anything else).
+      //    A partial restore must not delete anything: the point of restoring
+      //    one file is to salvage it, not to roll the whole tree back and take
+      //    everything written since the snapshot with it.
+      if (!wanted) {
+        const currentFiles = await collectSourceFiles(root);
+        for (const rel of currentFiles) {
+          if (!m.files.some((f) => f.path === rel)) {
+            try {
+              await fsp.rm(safeResolve(root, rel), { force: true });
+              removedFiles++;
+            } catch {
+              /* ignore */
+            }
+          }
         }
       }
-    }
 
-    // 3) write snapshot files back (jail-validated)
-    const store = this.storeFor(root);
-    let restoredFiles = 0;
-    for (const f of m.files) {
-      if (wanted && !wanted.has(f.path)) continue;
-      try {
-        const abs = safeResolve(root, f.path);
-        await safeRealpathInside(root, abs); // link guard
-        const buf = await store.readFile(id, f.path);
-        await fsp.mkdir(path.dirname(abs), { recursive: true });
-        await fsp.writeFile(abs, buf);
-        restoredFiles++;
-      } catch {
-        /* missing entry inside snapshot → skip */
+      // 3) write snapshot files back (jail-validated)
+      const store = this.storeFor(root);
+      for (const f of m.files) {
+        if (wanted && !wanted.has(f.path)) continue;
+        try {
+          const abs = safeResolve(root, f.path);
+          await safeRealpathInside(root, abs); // link guard
+          const buf = await store.readFile(id, f.path);
+          await fsp.mkdir(path.dirname(abs), { recursive: true });
+          await fsp.writeFile(abs, buf);
+          restoredFiles++;
+        } catch {
+          failed.push(f.path);
+        }
       }
+    } finally {
+      projectIndexService.resumeWatcher();
     }
 
-    // buffers no longer reflect disk truth — invalidation is wired by the
-    // routes layer (see routes/snapshots.ts) to avoid circular imports.
-    return { restoredFiles, removedFiles, preRestoreSnapshotId: '' };
+    return {
+      restoredFiles,
+      removedFiles,
+      preRestoreSnapshotId: pre.snapshotId,
+      failed,
+    };
   }
 }
+
+export const snapshotService = new SnapshotService();

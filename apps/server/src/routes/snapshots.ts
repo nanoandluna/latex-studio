@@ -1,186 +1,128 @@
 import type { FastifyInstance } from 'fastify';
-import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import path from 'node:path';
-import { SnapshotStore } from '../services/snapshots/snapshotStore.js';
-import { safeResolve, safeRealpathInside } from '../utils/paths.js';
-import { workspaceService } from '../services/workspaceService.js';
+import { snapshotService } from '../services/snapshotService.js';
+import { projectIndexService } from '../services/projectIndexService.js';
+import { toErrorPayload } from '../errors.js';
 import type { SnapshotReason } from '@latex-studio/shared';
 
-const VALID_REASONS: string[] = ['manual', 'auto', 'build-ok', 'pre-replace', 'pre-restore', 'before-import'];
+const VALID_REASONS: string[] = [
+  'manual',
+  'auto',
+  'build-ok',
+  'pre-replace',
+  'pre-restore',
+  'before-import',
+];
 
-function getStore(root: string) {
-  return new SnapshotStore(root);
+/**
+ * Snapshot ids are store-generated ([a-z0-9-]); anything else is rejected here
+ * so a crafted `:id` never reaches the filesystem layer.
+ */
+const SNAPSHOT_ID_RE = /^snap_[0-9]{14}_[a-z0-9]{1,8}$/;
+
+function badId(id: string) {
+  return { error: { code: 'INVALID_ARGUMENT', message: `Malformed snapshot id: ${id}` } };
 }
 
+/**
+ * Thin HTTP layer over SnapshotService — no filesystem logic lives here.
+ */
 export async function registerSnapshotRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/workspace/snapshots', async (req, reply) => {
-    const root = workspaceService.requireWorkspace();
     const body = (req.body ?? {}) as { reason?: string; label?: string };
     const reason = (VALID_REASONS as string[]).includes(body.reason ?? '')
       ? (body.reason as SnapshotReason)
       : 'manual';
 
-    const files = await collectSourceFiles(root);
-    const store = getStore(root);
-    const manifest = await store.create({
-      reason,
-      ...(body.label ? { label: body.label } : {}),
-      mainFile: 'main.tex',
-      files,
-      readContent: async (absPath: string) => {
-        safeResolve(root, path.relative(root, absPath).replace(/\\/g, '/'));
-        return fs.readFileSync(absPath);
-      },
-    });
-    return reply.code(201).send(manifest);
+    try {
+      const { manifest, skipped } = await snapshotService.create(reason, body.label);
+      return reply.code(skipped ? 200 : 201).send({ ...manifest, skipped });
+    } catch (err) {
+      const { error, statusCode } = toErrorPayload(err);
+      return reply.code(statusCode).send({ error });
+    }
   });
 
   app.get('/api/workspace/snapshots', async () => {
-    const root = workspaceService.requireWorkspace();
-    return getStore(root).list();
+    return snapshotService.list();
   });
 
   app.get('/api/workspace/snapshots/:id', async (req, reply) => {
-    const root = workspaceService.requireWorkspace();
     const { id } = req.params as { id: string };
-    const m = await getStore(root).get(id);
+    if (!SNAPSHOT_ID_RE.test(id)) return reply.code(400).send(badId(id));
+    const m = await snapshotService.get(id);
     if (!m) {
-      return reply.code(404).send({ error: { code: 'FILE_NOT_FOUND', message: `Unknown snapshot: ${id}` } });
+      return reply
+        .code(404)
+        .send({ error: { code: 'FILE_NOT_FOUND', message: `Unknown snapshot: ${id}` } });
     }
     return m;
   });
 
+  /** Per-file change list (status + inline content for the diff viewer). */
   app.get('/api/workspace/snapshots/:id/diff', async (req, reply) => {
-    const root = workspaceService.requireWorkspace();
     const { id } = req.params as { id: string };
-    const store = getStore(root);
-    const m = await store.get(id);
-    if (!m) {
-      return reply.code(404).send({ error: { code: 'FILE_NOT_FOUND', message: 'Unknown snapshot' } });
+    if (!SNAPSHOT_ID_RE.test(id)) return reply.code(400).send(badId(id));
+    try {
+      const entries = await snapshotService.diffAgainstWorkspace(id);
+      return { snapshotId: id, entries };
+    } catch (err) {
+      const { error, statusCode } = toErrorPayload(err);
+      return reply.code(statusCode).send({ error });
     }
-
-    const snapPaths = new Set(m.files.map((f) => f.path));
-    const currentFiles = await collectSourceFiles(root);
-    const currentSet = new Set(currentFiles);
-    const allPaths = [...new Set([...snapPaths, ...currentFiles])].sort();
-
-    const entries = [];
-    for (const rel of allPaths) {
-      const inSnap = snapPaths.has(rel);
-      const onDisk = currentSet.has(rel);
-      if (!inSnap && !onDisk) continue;
-
-      const isBinary = /\.(png|jpe?g|gif|svg|pdf|zip)$/i.test(rel);
-      let status: 'M' | 'A' | 'D' = 'M';
-      if (!onDisk) status = 'D';
-      else if (!inSnap) status = 'A';
-
-      let snapContent: string | undefined;
-      let diskContent: string | undefined;
-      if (!isBinary) {
-        try { snapContent = (await store.readFile(id, rel)).toString('utf8'); } catch {}
-        try { diskContent = (await fsp.readFile(path.join(root, rel), 'utf8')); } catch {}
-      }
-
-      entries.push({
-        path: rel,
-        status,
-        binary: isBinary,
-        ...(isBinary ? {} : { snapContent: snapContent ?? '', diskContent: diskContent ?? '' }),
-      });
-    }
-    return { snapshotId: id, entries };
   });
 
-  app.post('/api/workspace/snapshots/:id/restore', async (req, reply) => {
-    const root = workspaceService.requireWorkspace();
-    const { id } = req.params as { id: string };
-
-    // safety net: capture CURRENT state before overwriting
-    const preFiles = await collectSourceFiles(root);
-    const preId = `snap_pre_restore_${Date.now().toString(36)}`;
-    const tmpDir = path.join(root, '.latex-studio', 'snapshots', `.tmp-${preId}`);
+  /** Single file pair for the Monaco DiffEditor. */
+  app.get('/api/workspace/snapshots/:id/diff/file', async (req, reply) => {
+    const { id, path: rel } = req.query as { id: string; path?: string };
+    if (!SNAPSHOT_ID_RE.test(id)) return reply.code(400).send(badId(id));
+    if (!rel) {
+      return reply
+        .code(400)
+        .send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing path' } });
+    }
     try {
-      await fsp.mkdir(tmpDir, { recursive: true });
-      for (const rel of preFiles.sort()) {
-        const destAbs = path.join(tmpDir, 'files', ...rel.split('/'));
-        await fsp.mkdir(path.dirname(destAbs), { recursive: true });
-        await fsp.copyFile(path.join(root, rel), destAbs);
+      const pair = await snapshotService.diffFile(id, rel);
+      if (!pair) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'FILE_NOT_FOUND', message: `Unreadable: ${rel}` } });
       }
-      await fsp.writeFile(
-        path.join(tmpDir, 'manifest.json'),
-        JSON.stringify({
-          version: 1, snapshotId: preId, workspaceId: '',
-          createdAt: Date.now(), reason: 'pre-restore',
-          mainFile: 'main.tex', fileCount: preFiles.length,
-          totalBytes: 0, contentHash: '', files: [],
-        })
-      );
-      await fsp.rename(
-        tmpDir,
-        path.join(root, '.latex-studio', 'snapshots', preId)
-      );
-    } catch { /* non-fatal */ }
-
-    // validate + write snapshot files back to workspace
-    const store = getStore(root);
-    const m = await store.get(id);
-    if (!m) {
-      return reply.code(404).send({ error: { code: 'FILE_NOT_FOUND', message: 'Unknown snapshot' } });
+      return { snapshotId: id, path: rel, ...pair };
+    } catch (err) {
+      const { error, statusCode } = toErrorPayload(err);
+      return reply.code(statusCode).send({ error });
     }
+  });
 
-    let restored = 0;
-    for (const f of m.files) {
-      try {
-        const abs = safeResolve(root, f.path);
-        await safeRealpathInside(root, abs);
-        const buf = await store.readFile(id, f.path);
-        await fsp.mkdir(path.dirname(abs), { recursive: true });
-        await fsp.writeFile(abs, buf);
-        restored++;
-      } catch { /* skip */ }
+  /**
+   * Restore. Omitting `files` restores the whole snapshot; passing a subset
+   * restores just those paths (the removal pass only ever runs for a full
+   * restore, so a partial restore can never delete unrelated work).
+   */
+  app.post('/api/workspace/snapshots/:id/restore', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!SNAPSHOT_ID_RE.test(id)) return reply.code(400).send(badId(id));
+    const body = (req.body ?? {}) as { files?: string[] };
+    try {
+      const result = await snapshotService.restore(id, { files: body.files });
+      // disk truth changed under us — rebuild the index for the UI
+      await projectIndexService.refresh().catch(() => {});
+      return reply.code(200).send({ ok: result.failed.length === 0, ...result });
+    } catch (err) {
+      const { error, statusCode } = toErrorPayload(err);
+      return reply.code(statusCode).send({ error });
     }
-    return reply.code(200).send({ ok: true, restored, preRestoreSnapshotId: preId });
   });
 
   app.delete('/api/workspace/snapshots/:id', async (req, reply) => {
-    const root = workspaceService.requireWorkspace();
     const { id } = req.params as { id: string };
-    const deleted = await getStore(root).delete(id);
+    if (!SNAPSHOT_ID_RE.test(id)) return reply.code(400).send(badId(id));
+    const deleted = await snapshotService.delete(id);
     if (!deleted) {
-      return reply.code(404).send({ error: { code: 'FILE_NOT_FOUND', message: 'Not found' } });
+      return reply
+        .code(404)
+        .send({ error: { code: 'FILE_NOT_FOUND', message: 'Not found' } });
     }
     return { ok: true };
   });
-}
-
-/** Collect source file paths using the same walk rules as the indexer. */
-export async function collectSourceFiles(root: string): Promise<string[]> {
-  const out: string[] = [];
-  const walk = async (absDir: string, relDir: string): Promise<void> => {
-    let entries;
-    try {
-      entries = await fsp.readdir(absDir, { withFileTypes: true });
-    } catch { return; }
-    for (const e of entries) {
-      if (e.isSymbolicLink()) continue; // jail: never follow links
-      if (
-        e.name.startsWith('.') ||
-        e.name === 'node_modules' ||
-        e.name === '.build' ||
-        e.name === '.latex-studio'
-      ) continue;
-      const rel = relDir ? `${relDir}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        await walk(path.join(absDir, e.name), rel);
-      } else if (e.isFile()) {
-        // skip LaTeX build artifacts even outside .build
-        if (/\.(aux|log|fls|fdb_latexmk|synctex\.gz|synctex\.busy|bbl|bcf|run\.xml|out|toc|lof|lot|blg|xdv)$/i.test(e.name)) continue;
-        out.push(rel);
-      }
-    }
-  };
-  await walk(path.resolve(root), '');
-  return out;
 }

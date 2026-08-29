@@ -191,7 +191,7 @@ pnpm release:check    # the full gate
 
 All API errors use `{ error: { code, message } }`:
 
-`WORKSPACE_NOT_FOUND` · `WORKSPACE_NOT_OPEN` · `FILE_NOT_FOUND` · `PATH_FORBIDDEN` · `FORBIDDEN` · `UNAUTHORIZED` · `INVALID_FILE` · `INVALID_ARGUMENT` · `COMPILER_NOT_FOUND` · `BUILD_FAILED` · `BUILD_TIMEOUT` · `BUILD_CANCELLED` · `CONFLICT` · `INTERNAL_ERROR`
+`WORKSPACE_NOT_FOUND` · `WORKSPACE_NOT_OPEN` · `FILE_NOT_FOUND` · `PATH_FORBIDDEN` · `FORBIDDEN` · `UNAUTHORIZED` · `INVALID_FILE` · `INVALID_ARGUMENT` · `COMPILER_NOT_FOUND` · `BUILD_FAILED` · `BUILD_TIMEOUT` · `BUILD_CANCELLED` · `CONFLICT` · `SNAPSHOT_FAILED` · `REPLACE_FAILED` · `CONFIRMATION_REQUIRED` · `SEARCH_TIMEOUT` · `INVALID_ARCHIVE` · `PAYLOAD_TOO_LARGE` · `IMPORT_FAILED` · `EXPORT_FAILED` · `INTERNAL_ERROR`
 
 Build states: `Ready → Building… → Build successful / Build failed / Cancelled / Timed out / No LaTeX compiler found`
 
@@ -205,13 +205,16 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 | Port 3210 busy | Set `PORT=<n>` env var. |
 | SyncTeX jump does nothing | Rebuild once (needs `-synctex=1` output). |
 
-## Known limitations (v0.4.0)
+## Known limitations (v0.4.1)
 
 - PDF search highlights matches per text-item; hyphenation across line ends may still be missed.
 - Single workspace at a time; single user by design.
 - Per-file parse cache persists in `.latex-studio/cache/` (schema-gated); assembled graph rebuilt in memory each session.
 - Spell/grammar checking not provided.
 - Linux `fs.watch` non-recursive fallback relies on debounced mtime diff (not tested on real Linux).
+- Project search scans raw file lines — comments and verbatim text are **not** excluded. Deliberate: Replace All must write back original lines, so search and replace must see the same text.
+- Replace preview shows per-file counts rather than per-hunk before/after context; the real before/after is in History under the automatic `pre-replace` snapshot.
+- Replace previews are held in memory for 10 minutes and are single-use; run Preview again after that.
 
 ## Roadmap
 
@@ -220,7 +223,8 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 - ~~V0.2.x — LaTeX IDE Intelligence~~ ✅
 - ~~V0.3.x — Research Workspace Intelligence · Intelligence Hardening~~ ✅
 - ~~V0.4.0 — Writer's Safety + Search~~ ✅ (Snapshot · History/Diff/Restore · Project Search & Replace · Paper Statistics · ZIP Export/Import)
-- V0.4.1 — SSE Build Progress · large-project polish · crash recovery regression
+- ~~V0.4.1 — Review hardening~~ ✅ (P0 partial-restore fix · fs.watch bulk-write perf overhaul · full search/replace/snapshot/restore E2E · auto-save settings UI)
+- V0.4.2 — SSE Build Progress · large-project polish · crash recovery regression
 - V0.5.0 — Research Writing Workspace: Citation Workspace · Terminology Consistency/Glossary · PDF Thumbnails · Reading Position Memory · 中文界面
 - V0.6.0 — Literature Bridge: Zotero/Better BibTeX workflow deepening · literature PDF reading
 - V0.7.0 — Long-term Reliability: snapshot format evolution · migration · backup/recovery hardening

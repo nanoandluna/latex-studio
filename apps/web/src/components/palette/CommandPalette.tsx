@@ -4,6 +4,9 @@ import { useBuildStore } from '../../stores/buildStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useSettingsStore, type CompilerChoice } from '../../stores/settingsStore';
+import { useSnapshotStore } from '../../stores/snapshotStore';
+import { AUTO_SAVE_OPTIONS } from '../../hooks/useAutoSave';
+import { showPanel } from '../../hooks/useHotkeys';
 
 interface Command {
   id: string;
@@ -26,6 +29,9 @@ export function CommandPalette() {
   const ui = useUiStore((s) => s);
   const setCompiler = useSettingsStore((s) => s.setCompiler);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const setAutoSave = useSettingsStore((s) => s.setAutoSave);
+  const autoSnapshot = useSettingsStore((s) => s.autoSnapshot);
+  const setAutoSnapshot = useSettingsStore((s) => s.setAutoSnapshot);
   const openFile = useEditorStore((s) => s.openFile);
 
   const fileCommands = useMemo<Command[]>(() => {
@@ -60,6 +66,16 @@ export function CommandPalette() {
       { id: 'toggle-explorer', label: 'Toggle Explorer', run: () => ui.toggleExplorer() },
       { id: 'reload', label: 'Reload Workspace Tree', run: () => void workspace.refreshTree() },
       { id: 'detect-main', label: 'Re-detect Main File', run: () => void workspace.detectMainFile().then((f) => f && workspace.setMainFile(f)) },
+      {
+        id: 'snapshot',
+        label: 'Take Snapshot',
+        hint: 'Ctrl+Shift+S',
+        run: () => {
+          void useSnapshotStore.getState().create('manual', 'palette');
+          showPanel('history');
+        },
+      },
+      { id: 'open-history', label: 'Open Snapshot History', run: () => showPanel('history') },
       {
         id: 'graph-debug',
         label: 'Developer: Dump Graph Debug to Output',
@@ -102,8 +118,21 @@ export function CommandPalette() {
     for (const t of ['dark', 'light', 'system'] as const) {
       cmds.push({ id: `theme-${t}`, label: `Theme: ${t}`, run: () => setTheme(t) });
     }
+    for (const o of AUTO_SAVE_OPTIONS) {
+      cmds.push({
+        id: `autosave-${o.value}`,
+        label: `Auto Save: ${o.label}`,
+        run: () => setAutoSave(o.value),
+      });
+    }
+    cmds.push({
+      id: 'autosave-snapshot-toggle',
+      label: 'Auto Snapshot on Focus Loss',
+      hint: autoSnapshot ? 'currently on — turn off' : 'currently off — turn on',
+      run: () => setAutoSnapshot(!autoSnapshot),
+    });
     return cmds;
-  }, [build, saveActive, ui, workspace, setCompiler, setTheme]);
+  }, [build, saveActive, ui, workspace, setCompiler, setTheme, setAutoSave, autoSnapshot, setAutoSnapshot]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

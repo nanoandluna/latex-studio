@@ -12,6 +12,7 @@ import { registerTemplateRoutes } from './routes/templates.js';
 import { registerSnapshotRoutes } from './routes/snapshots.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerStatisticsRoutes } from './routes/statistics.js';
+import { registerProjectRoutes } from './routes/project.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerEnvRoutes } from './routes/env.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
@@ -57,6 +58,7 @@ export async function createApp() {
   await registerSnapshotRoutes(app);
   await registerSearchRoutes(app);
   await registerStatisticsRoutes(app);
+  await registerProjectRoutes(app);
 
   // V0.3.1 developer observability: Project Graph Inspector dump.
   app.get('/api/graph/debug', async () => {
@@ -82,7 +84,9 @@ export async function createApp() {
     await app.register(fastifyStatic, { root: webDist });
     app.setNotFoundHandler(async (req, reply) => {
       if (req.url.startsWith('/api/')) {
-        return reply.code(404).send({ error: 'Not found' });
+        return reply
+          .code(404)
+          .send({ error: { code: 'FILE_NOT_FOUND', message: `No such endpoint: ${req.url}` } });
       }
       return reply.sendFile('index.html');
     });

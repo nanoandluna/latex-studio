@@ -20,6 +20,9 @@ export function safeResolve(root: string, relPath: string): string {
   if (
     path.isAbsolute(relPath) ||
     /^[a-zA-Z]:/.test(normalized) ||
+    // UNC: on Windows path.resolve() turns a leading '//' into \\server\share,
+    // which no longer sits under root. Reject before resolving.
+    normalized.startsWith('//') ||
     normalized === '..' ||
     normalized.startsWith('../') ||
     normalized.includes('\0')
@@ -65,14 +68,31 @@ export function isTextFile(name: string): boolean {
 }
 
 /**
+ * Real path of the workspace root, cached.
+ *
+ * Callers run this check once per file, and `fs.realpath` on the root is pure
+ * repetition — it halved the cost of a 1000-file Replace All. The workspace
+ * root cannot change without an explicit open/close, which clears the cache.
+ */
+const realRootCache = new Map<string, string>();
+
+/** Drop cached root paths (call when the workspace root changes). */
+export function clearRealpathCache(): void {
+  realRootCache.clear();
+}
+
+/**
  * V0.3 filesystem-boundary hardening: resolve the REAL path (following any
  * symlink/junction/reparse point) and verify it still lands inside the real
  * root. Throws PathTraversalError when a link escapes the workspace.
  */
 export async function safeRealpathInside(root: string, absPath: string): Promise<string> {
-  const [realAbs, realRoot] = await Promise.all([fs.realpath(absPath), fs.realpath(root)]);
-  const normRoot = realRoot.replace(/[\\/]+$/, '');
-  if (realAbs !== normRoot && !realAbs.startsWith(normRoot + path.sep)) {
+  const cachedRoot = realRootCache.get(root);
+  const realRoot = cachedRoot ?? (await fs.realpath(root)).replace(/[\\/]+$/, '');
+  if (!cachedRoot) realRootCache.set(root, realRoot);
+
+  const realAbs = await fs.realpath(absPath);
+  if (realAbs !== realRoot && !realAbs.startsWith(realRoot + path.sep)) {
     throw new PathTraversalError(absPath);
   }
   return realAbs;

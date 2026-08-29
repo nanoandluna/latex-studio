@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import type { SnapshotManifest, SnapshotReason } from '@latex-studio/shared';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { safeResolve } from '../../utils/paths.js';
 
 /**
  * V0.4 Snapshot Store — atomic, hash-verified local snapshots.
@@ -61,6 +62,15 @@ export class SnapshotStore {
 
   /**
    * Atomically create a snapshot from workspace-relative files.
+   *
+   * `readContent` always receives a workspace-relative POSIX path and is
+   * expected to return that file's bytes. Callers must resolve it against the
+   * workspace root themselves (see safeResolve) — passing it straight to
+   * fs.readFile would resolve against process.cwd() instead.
+   *
+   * When `skipIfUnchanged` is set and the freshly computed contentHash matches
+   * the newest existing snapshot, nothing is written and that snapshot is
+   * returned with `skipped: true`.
    */
   async create(
     input: {
@@ -69,8 +79,9 @@ export class SnapshotStore {
       mainFile: string;
       files: string[];
       readContent: (relPath: string) => Promise<Buffer>;
+      skipIfUnchanged?: boolean;
     }
-  ): Promise<SnapshotManifest> {
+  ): Promise<{ manifest: SnapshotManifest; skipped: boolean }> {
     const now = new Date();
     const stamp = now.toISOString().replace(/[-:T]/g, '').slice(0, 14);
     const rand = Math.random().toString(36).slice(2, 8);
@@ -78,31 +89,63 @@ export class SnapshotStore {
     const tmpDir = path.join(this.baseDir, `.tmp-${id}`);
     const finalDir = this.snapshotDir(id);
 
-    const fileEntries: { path: string; size: number; mtimeMs: number; hash: string }[] = [];
     const hashes: string[] = [];
     let totalBytes = 0;
 
     try {
-      for (const rel of input.files) {
+      // Read+write in bounded parallel batches. A 1000-file snapshot used to
+      // walk the project serially, which alone blew the Replace All budget —
+      // each file costs a read, a stat and a write, and on Windows those add
+      // up to seconds of pure latency. Order stays deterministic: entries are
+      // written back into input order regardless of completion order.
+      const madeDirs = new Set<string>();
+      const CONCURRENCY = 16;
+
+      const processOne = async (rel: string): Promise<SnapshotManifest['files'][number]> => {
         const buf = await input.readContent(rel);
         const hash = sha256(buf);
-        let mtimeMs = Date.now();
-        try {
-          mtimeMs = (await fs.promises.stat(path.join(this.root, rel))).mtimeMs;
-        } catch {
-          /* stat optional */
-        }
 
         const destAbs = path.join(tmpDir, 'files', ...rel.split('/'));
-        await fs.promises.mkdir(path.dirname(destAbs), { recursive: true });
+        const dir = path.dirname(destAbs);
+        if (!madeDirs.has(dir)) {
+          await fs.promises.mkdir(dir, { recursive: true });
+          madeDirs.add(dir);
+        }
         await fs.promises.writeFile(destAbs, buf);
 
-        fileEntries.push({ path: rel, size: buf.length, mtimeMs, hash });
-        hashes.push(`${rel}:${hash}`);
-        totalBytes += buf.length;
+        // Creation time, not the source file's mtime: this field answers
+        // "when was this captured", and dropping the per-file stat removes a
+        // third of the snapshot's thread-pool work.
+        return { path: rel, size: buf.length, mtimeMs: now.getTime(), hash };
+      };
+
+      const fileEntries: SnapshotManifest['files'] = new Array(input.files.length);
+      let cursor = 0;
+      const worker = async (): Promise<void> => {
+        while (cursor < input.files.length) {
+          const i = cursor++;
+          fileEntries[i] = await processOne(input.files[i]);
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, input.files.length) }, worker)
+      );
+
+      for (const e of fileEntries) {
+        hashes.push(`${e.path}:${e.hash}`);
+        totalBytes += e.size;
       }
 
       const contentHash = sha256(hashes.sort().join('\n'));
+
+      if (input.skipIfUnchanged) {
+        const newest = (await this.list())[0];
+        if (newest && newest.contentHash === contentHash) {
+          await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+          return { manifest: newest, skipped: true };
+        }
+      }
+
       const manifest: SnapshotManifest = {
         version: 1,
         snapshotId: id,
@@ -128,16 +171,23 @@ export class SnapshotStore {
       }
 
       await fs.promises.rename(tmpDir, finalDir); // atomic publish
-      return manifest;
+      return { manifest, skipped: false };
     } catch (err) {
       await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       throw err;
     }
   }
 
-  /** Read one file's content out of a snapshot. */
+  /**
+   * Read one file's content out of a snapshot.
+   *
+   * The jail is applied here too rather than trusting callers: snapshot reads
+   * are driven by manifest entries, and a manifest is data we wrote once and
+   * read back many times.
+   */
   async readFile(id: string, relPath: string): Promise<Buffer> {
-    const abs = path.join(this.snapshotDir(id), 'files', ...relPath.split('/'));
+    const filesDir = path.join(this.snapshotDir(id), 'files');
+    const abs = safeResolve(filesDir, relPath);
     return fs.promises.readFile(abs);
   }
 
@@ -155,15 +205,26 @@ export class SnapshotStore {
   }
 
   /**
-   * Retention policy: hard cap by count (newest kept), plus age-based
-   * coalescing beyond 24h — at most one snapshot per UTC day.
+   * Retention policy (V0.4-PLAN 1.3), applied newest-first:
+   *   1. hard cap by count — everything past `maxCount` is dropped
+   *   2. beyond 24h — at most one snapshot per UTC day
+   *   3. beyond `maxAgeDays` — dropped outright
    */
-  async prune(policy: { maxCount: number }): Promise<string[]> {
-    const all = await this.list();
+  async prune(policy: { maxCount: number; maxAgeDays?: number }): Promise<string[]> {
     const removed: string[] = [];
+    const maxAgeDays = policy.maxAgeDays ?? 30;
+    const maxAgeMs = maxAgeDays * 24 * 3600_000;
 
+    let all = await this.list();
     for (let i = policy.maxCount; i < all.length; i++) {
       if (await this.delete(all[i].snapshotId)) removed.push(all[i].snapshotId);
+    }
+
+    all = await this.list();
+    for (const m of all) {
+      if (Date.now() - m.createdAt > maxAgeMs) {
+        if (await this.delete(m.snapshotId)) removed.push(m.snapshotId);
+      }
     }
 
     const olderThan24h = (await this.list()).filter(
@@ -181,7 +242,3 @@ export class SnapshotStore {
     return removed;
   }
 }
-
-
-
-

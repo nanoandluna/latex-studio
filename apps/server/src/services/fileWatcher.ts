@@ -21,6 +21,19 @@ const IGNORED_TOP_DIRS = new Set(['.build', '.latex-studio', 'node_modules', '.g
 const ARTIFACT_RE =
   /\.(aux|log|fls|fdb_latexmk|synctex\.gz|synctex\.busy|bbl|bcf|run\.xml|out|toc|lof|lot|blg|xdv)$/i;
 
+/**
+ * "Never part of the project" — metadata dirs and LaTeX artifacts.
+ *
+ * Kept separate from {@link isIgnoredWorkspacePath} because export legitimately
+ * needs dotfiles: a project must carry `.latexmkrc`, which the watcher
+ * predicate drops together with everything else hidden.
+ */
+export function isMetadataOrArtifact(relPosix: string): boolean {
+  const first = relPosix.split('/')[0];
+  if (first && IGNORED_TOP_DIRS.has(first)) return true;
+  return ARTIFACT_RE.test(relPosix);
+}
+
 export function isIgnoredWorkspacePath(relPosix: string): boolean {
   const first = relPosix.split('/')[0];
   if (first && IGNORED_TOP_DIRS.has(first)) return true;
@@ -34,6 +47,16 @@ export class FileWatcher {
   private pending = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private startedAt = 0;
+  /**
+   * Suspension depth for bulk writes (snapshot / restore / replace / import).
+   *
+   * On Windows a recursive fs.watch taxes every create in the watched tree —
+   * dropping the JS callbacks is not enough, the ReadDirectoryChangesW handle
+   * itself must go: a 1000-file write ran ~10x slower with the handle live.
+   * Bulk writers already rebuild the index explicitly afterwards, so events
+   * observed mid-write are redundant by construction.
+   */
+  private suspendDepth = 0;
 
   /** Set by the owner (ProjectIndexService). Receives coalesced rel paths. */
   onChange: ((paths: string[]) => void) | null = null;
@@ -44,6 +67,31 @@ export class FileWatcher {
 
   get watchedRoot(): string | null {
     return this.root;
+  }
+
+  suspend(): void {
+    this.suspendDepth++;
+    if (this.suspendDepth === 1 && this.watcher) {
+      this.watcher.close();
+      this.watcher = null;
+    }
+  }
+
+  resume(): void {
+    this.suspendDepth = Math.max(0, this.suspendDepth - 1);
+    if (this.suspendDepth === 0 && this.root && !this.watcher) {
+      try {
+        this.watcher = fs.watch(this.root, { recursive: true }, (_event, name) => {
+          this.onFsEvent(name);
+        });
+      } catch {
+        this.watcher = null;
+      }
+    }
+  }
+
+  private get suspended(): boolean {
+    return this.suspendDepth > 0;
   }
 
   start(root: string): void {
@@ -75,6 +123,7 @@ export class FileWatcher {
   }
 
   private onFsEvent(name: string | Buffer | null): void {
+    if (this.suspended) return;
     if (Date.now() - this.startedAt < 300) return; // attach storm guard
     if (!name) return;
     const rel = name.toString().replace(/\\/g, '/');

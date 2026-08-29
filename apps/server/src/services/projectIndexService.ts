@@ -12,6 +12,7 @@ import {
   type FileParseResult,
 } from '@latex-studio/latex-parser';
 import { safeResolve } from '../utils/paths.js';
+import { collectSourceFiles } from '../utils/walkWorkspace.js';
 import { workspaceService } from './workspaceService.js';
 import { FileWatcher } from './fileWatcher.js';
 import { GRAPH_SCHEMA_VERSION } from '@latex-studio/latex-parser';
@@ -58,6 +59,13 @@ export class ProjectIndexService {
     { mtimeMs: number; size: number; entries: ReturnType<typeof parseBibDocumentEntries> }
   >();
   private buffers = new Map<string, string>();
+  /**
+   * Raw file text kept beside the parse cache so features that need the full
+   * body (V0.4 statistics) never re-read disk on a repeat call. Keyed by
+   * (mtimeMs, size) and memory-only — persisting whole documents would make
+   * the on-disk cache grow with project size.
+   */
+  private contentCache = new Map<string, { mtimeMs: number; size: number; content: string }>();
   private current: ProjectIndex | null = null;
   private inFlight: Promise<IndexRefreshResult> | null = null;
   private builtForRoot: string | null = null;
@@ -100,8 +108,53 @@ export class ProjectIndexService {
     this.watcher.stop();
   }
 
+  /**
+   * Suspend FS event handling while a bulk write (snapshot / restore /
+   * replace / import) is in flight. Nestable: an apply wraps its own
+   * pre-replace snapshot, so a plain boolean would resume too early.
+   */
+  suspendWatcher(): void {
+    this.watcher.suspend();
+  }
+
+  resumeWatcher(): void {
+    this.watcher.resume();
+  }
+
   getSnapshot(): ProjectIndex | null {
     return this.current;
+  }
+
+  /**
+   * Full text of a workspace file for features that need the whole body
+   * (V0.4 statistics). Precedence: unsaved editor buffer → content cache →
+   * disk. The cache is keyed by (mtimeMs, size) so a saved file invalidates
+   * itself, and repeat calls cost no I/O.
+   */
+  async getFileContent(relPath: string): Promise<string | null> {
+    const rel = relPath.replace(/\\/g, '/');
+    const buffered = this.buffers.get(rel);
+    if (buffered !== undefined) return buffered;
+
+    const root = workspaceService.workspacePath;
+    if (!root) return null;
+
+    let abs: string;
+    try {
+      abs = safeResolve(root, rel);
+    } catch {
+      return null;
+    }
+    try {
+      const stat = await fs.stat(abs);
+      const hit = this.contentCache.get(rel);
+      if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size) return hit.content;
+      const content = await fs.readFile(abs, 'utf8');
+      this.contentCache.set(rel, { mtimeMs: stat.mtimeMs, size: stat.size, content });
+      return content;
+    } catch {
+      return null;
+    }
   }
 
   needsRebuild(): boolean {
@@ -118,6 +171,7 @@ export class ProjectIndexService {
     this.cache.clear();
     this.bibCache.clear();
     this.buffers.clear();
+    this.contentCache.clear();
     this.current = null;
     this.inFlight = null;
     this.builtForRoot = null;
@@ -170,15 +224,20 @@ export class ProjectIndexService {
       this.builtForRoot = root;
     }
 
-    const texFiles: string[] = [];
-    const bibFiles: string[] = [];
-    await this.walk(root, '', texFiles, bibFiles);
+    const { tex: texFiles, bib: bibFiles } = await collectIndexables(root);
     const walkMs = Date.now() - walkStart;
     const parseStart = Date.now();
 
     let cacheHits = 0;
     const parsed: FileParseResult[] = [];
-    for (const rel of texFiles) {
+    // Yield to the event loop between parse batches. With every file in the
+    // buffer cache the whole loop below is synchronous CPU work — one full
+    // rebuild of a 1000-file project held the event loop for ~2.3s, freezing
+    // every in-flight HTTP response.
+    const BATCH = 64;
+    for (let i = 0; i < texFiles.length; i++) {
+      if (i > 0 && i % BATCH === 0) await new Promise((r) => setImmediate(r));
+      const rel = texFiles[i];
       const buf = this.buffers.get(rel);
       if (buf !== undefined) {
         parsed.push(this.parseWithCache(rel, buf, Date.now(), buf.length));
@@ -374,38 +433,24 @@ export class ProjectIndexService {
     return parsed;
   }
 
-  private async walk(
-    absDir: string,
-    relDir: string,
-    texOut: string[],
-    bibOut: string[]
-  ): Promise<void> {
-    let entries;
-    try {
-      entries = await fs.readdir(absDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (
-        e.name.startsWith('.') ||
-        e.name === 'node_modules' ||
-        e.name === '.build' ||
-        e.name === '.latex-studio'
-      ) {
-        continue;
-      }
-      // V0.3 security: never follow symlinks/junctions out of the jail.
-      if (e.isSymbolicLink()) continue;
-      const rel = relDir ? `${relDir}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        await this.walk(path.join(absDir, e.name), rel, texOut, bibOut);
-      } else if (e.isFile()) {
-        if (/\.tex$/i.test(e.name)) texOut.push(rel);
-        else if (/\.bib$/i.test(e.name)) bibOut.push(rel);
-      }
-    }
+}
+
+/**
+ * Files the indexer cares about, via the shared source walk.
+ *
+ * Keeping the exclusion rules in one place means the index, snapshots, search
+ * and export can never disagree about what belongs to a project.
+ */
+async function collectIndexables(
+  root: string
+): Promise<{ tex: string[]; bib: string[] }> {
+  const tex: string[] = [];
+  const bib: string[] = [];
+  for (const rel of await collectSourceFiles(root)) {
+    if (rel.toLowerCase().endsWith('.tex')) tex.push(rel);
+    else if (rel.toLowerCase().endsWith('.bib')) bib.push(rel);
   }
+  return { tex, bib };
 }
 
 export const projectIndexService = new ProjectIndexService();

@@ -9,6 +9,7 @@ import { CommandPalette } from './components/palette/CommandPalette';
 import { WorkspaceModal } from './components/dialogs/WorkspaceModal';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useAutoBuild } from './hooks/useAutoBuild';
+import { useAutoSave } from './hooks/useAutoSave';
 import { useWorkspaceStore } from './stores/workspaceStore';
 import { useUiStore } from './stores/uiStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -30,6 +31,7 @@ export default function App() {
 
   useHotkeys();
   useAutoBuild();
+  useAutoSave();
 
   // Theme class on <html>
   useEffect(() => {

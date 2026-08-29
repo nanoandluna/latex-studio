@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FileNode } from '@latex-studio/shared';
-import { safeResolve, isDirectory, isTextFile } from '../utils/paths.js';
+import { safeResolve, isDirectory, isTextFile, clearRealpathCache } from '../utils/paths.js';
 import { ApiError } from '../errors.js';
 
 const IGNORED_DIRS = new Set(['.git', '.build', 'node_modules', '__pycache__']);
@@ -30,11 +30,14 @@ export class WorkspaceService {
     if (!(await isDirectory(resolved))) {
       throw new ApiError('WORKSPACE_NOT_FOUND', `Not a directory: ${dirPath}`, 400);
     }
+    // the jail caches the root's real path; a new root invalidates it
+    clearRealpathCache();
     this.root = resolved;
     return { path: resolved, name: path.basename(resolved) };
   }
 
   async close(): Promise<void> {
+    clearRealpathCache();
     this.root = null;
   }
 

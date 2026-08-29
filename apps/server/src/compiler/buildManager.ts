@@ -271,6 +271,18 @@ export class BuildManager {
     }
     record.errorCount = record.problems.filter((p) => p.severity === 'error').length;
     record.warningCount = record.problems.filter((p) => p.severity === 'warning').length;
+
+    // V0.4-PLAN 1.3: a successful build is a "known-good" point in time.
+    // Best-effort — a snapshot failure must never change the build result.
+    if (record.status === 'success' && record.pdfAvailable) {
+      try {
+        const { snapshotService } = await import('../services/snapshotService.js');
+        const { manifest } = await snapshotService.create('build-ok');
+        record.snapshotId = manifest.snapshotId;
+      } catch {
+        /* snapshot is a convenience; builds must not fail because of it */
+      }
+    }
   }
 
   dispose(): void {

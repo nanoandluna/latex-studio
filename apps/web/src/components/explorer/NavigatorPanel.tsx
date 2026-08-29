@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { useEditorStore } from '../../stores/editorStore';
+import { StatisticsPanel } from '../statistics/StatisticsPanel';
 
 type GroupKey =
   | 'sections'
@@ -37,6 +38,7 @@ export function NavigatorPanel() {
   const openFileAtLine = useEditorStore((s) => s.openFileAtLine);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [showStats, setShowStats] = useState(false);
 
   const grouped = useMemo(() => {
     if (!index) return null;
@@ -176,7 +178,30 @@ export function NavigatorPanel() {
 
   return (
     <div className="pb-2">
-      {GROUPS.map(({ key, label, icon }) => {
+      <div className="flex items-center gap-1 border-b border-zinc-200 px-2 pb-1 dark:border-zinc-800">
+        {(
+          [
+            ['symbols', 'Symbols'],
+            ['stats', 'Stats'],
+          ] as const
+        ).map(([key, text]) => (
+          <button
+            key={key}
+            onClick={() => setShowStats(key === 'stats')}
+            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              (key === 'stats') === showStats
+                ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
+                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+
+      {showStats && <StatisticsPanel />}
+
+      {!showStats && GROUPS.map(({ key, label, icon }) => {
         const items =
           key === 'diagnostics'
             ? (grouped.diagnostics.map((d) => ({

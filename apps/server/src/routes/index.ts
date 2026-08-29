@@ -52,9 +52,6 @@ export async function registerIndexRoutes(app: FastifyInstance): Promise<void> {
         safeResolve(workspaceService.workspacePath, rel);
         projectIndexService.updateBuffer(rel, content);
         accepted = true;
-        if (process.env.LS_DEBUG) {
-          const svc = projectIndexService as unknown as { buffers: Map<string,string> };
-        }
       } catch {
         /* invalid path — ignore silently */
       }

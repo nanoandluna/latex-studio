@@ -93,6 +93,8 @@ export interface BuildRecord extends BuildResult {
   compiler: CompilerId;
   startedAt: number;
   logTail?: string;
+  /** V0.4 — snapshot taken when this build succeeded (absent on failure) */
+  snapshotId?: string;
 }
 
 export interface WorkspaceState {
@@ -366,6 +368,43 @@ export interface TextStatistics {
   estimatedWords: number;
 }
 
+/** TextStatistics plus the counters the analyzer derives alongside them. */
+export interface TextStats extends TextStatistics {
+  equations: number;
+}
+
+/** One row of the three-level aggregation (project / chapter / section). */
+export interface StatisticsSection {
+  title: string;
+  /** Present on section rows; chapter rows omit it. */
+  level?: number;
+  file: string;
+  line: number;
+  stats: TextStats;
+}
+
+export interface StatisticsResponse {
+  project: TextStats & {
+    figures: number;
+    tables: number;
+    sections: number;
+    citations: number;
+    bibEntries: number;
+  };
+  chapters: StatisticsSection[];
+  sections: StatisticsSection[];
+  files: { path: string; stats: TextStats }[];
+}
+
+/** Status is relative to the snapshot: what the working tree did since. */
+export interface SnapshotDiffEntry {
+  path: string;
+  status: 'M' | 'A' | 'D';
+  binary: boolean;
+  snapshotContent?: string;
+  currentContent?: string;
+}
+
 export interface SearchOptions {
   query: string;
   caseSensitive?: boolean;
@@ -380,6 +419,8 @@ export interface SearchMatch {
   line: number;
   column: number;
   preview: string;
+  /** Length of the matched text, so the UI can highlight it on jump. */
+  length: number;
 }
 
 export interface SearchResponse {
@@ -393,8 +434,37 @@ export interface ReplacePlanEntry {
   replacements: number;
 }
 
-export interface ReplacePlan {
+export interface ProjectImportResult {
+  ok: boolean;
+  importedFiles: number;
+  /** Entries rejected by the path jail, with the reason for each. */
+  rejected: { name: string; reason: string }[];
+  /** Snapshot taken before the import, for undo. Null when the workspace was empty. */
+  snapshotId: string | null;
+}
+
+export type ReplacePreviewRequest = SearchOptions & { replacement: string };
+
+/**
+ * Stage 1 of Replace All: what would change, plus a single-use token that the
+ * apply call must present. No files are touched and no snapshot is taken yet.
+ */
+export interface ReplacePreviewResponse {
+  confirmToken: string;
   totalReplacements: number;
   files: ReplacePlanEntry[];
+}
+
+export type ReplaceApplyRequest = SearchOptions & {
+  replacement: string;
+  confirmToken: string;
+};
+
+/** Stage 2: applied. Always carries the pre-replace snapshot id for undo. */
+export interface ReplaceApplyResponse {
+  ok: boolean;
+  filesModified: number;
+  totalReplacements: number;
+  /** Safety-net snapshot taken immediately before the writes. */
   snapshotId: string;
 }
