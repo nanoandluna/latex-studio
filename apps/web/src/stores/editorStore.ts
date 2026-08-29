@@ -24,6 +24,7 @@ interface EditorState {
   setCursorLine: (path: string, line: number) => void;
   clearReveal: () => void;
   isDirty: (tab: EditorTab) => boolean;
+  reloadCleanTabs: () => Promise<void>;
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -92,6 +93,36 @@ export const useEditorStore = create<EditorState>()(
       clearReveal: () => set({ revealTarget: null }),
 
       isDirty: (tab) => tab.content !== tab.savedContent,
+
+      /**
+       * Re-sync clean tabs after disk truth changed underneath them (snapshot
+       * restore, replace-all). The reloaded state counts as saved — the buffer
+       * simply reflects the new disk bytes. Dirty tabs keep the user's unsaved
+       * buffer: the buffer wins until an explicit save. Files a restore removed
+       * keep their last buffer, so nothing on screen disappears.
+       */
+      reloadCleanTabs: async () => {
+        const clean = get().tabs.filter((t) => !get().isDirty(t));
+        if (clean.length === 0) return;
+        const results = await Promise.all(
+          clean.map(async (t) => {
+            try {
+              const res = await api.readFile(t.path);
+              return { path: t.path, content: res.content };
+            } catch {
+              return null;
+            }
+          })
+        );
+        const fresh = new Map<string, string>();
+        for (const r of results) if (r) fresh.set(r.path, r.content);
+        if (fresh.size === 0) return;
+        set({
+          tabs: get().tabs.map((t) =>
+            fresh.has(t.path) ? { ...t, content: fresh.get(t.path)!, savedContent: fresh.get(t.path)! } : t
+          ),
+        });
+      },
     }),
     {
       name: 'latex-studio-editor',

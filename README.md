@@ -215,6 +215,7 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 - Project search scans raw file lines — comments and verbatim text are **not** excluded. Deliberate: Replace All must write back original lines, so search and replace must see the same text.
 - Replace preview shows per-file counts rather than per-hunk before/after context; the real before/after is in History under the automatic `pre-replace` snapshot.
 - Replace previews are held in memory for 10 minutes and are single-use; run Preview again after that.
+- Tabs with unsaved edits keep their buffer when a restore or Replace All rewrites the file underneath; the buffer wins until an explicit save. Clean tabs re-sync automatically.
 
 ## Roadmap
 

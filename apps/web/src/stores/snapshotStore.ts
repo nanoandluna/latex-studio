@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
+import { useEditorStore } from './editorStore';
 import type { SnapshotDiffEntry, SnapshotManifest, SnapshotReason } from '@latex-studio/shared';
 
 interface SnapshotState {
@@ -90,6 +91,8 @@ export const useSnapshotStore = create<SnapshotState>()((set, get) => ({
       });
       await get().refresh();
       await get().select(null);
+      // disk truth changed — bring clean editor buffers back in sync
+      await useEditorStore.getState().reloadCleanTabs();
       return res.failed.length === 0;
     } catch (err) {
       set({ restoringId: null, error: (err as Error).message || 'Restore failed' });

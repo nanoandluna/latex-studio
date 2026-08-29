@@ -52,6 +52,11 @@ test.describe('12 · writer safety loop (search → replace → snapshot → dif
     await expect(applyButton).toBeEnabled();
     await applyButton.click();
     await expect(page.getByText(/Replaced 1 in 1 file/)).toBeVisible({ timeout: 30_000 });
+    // the open editor buffer re-syncs to the replaced disk content, still clean
+    await expect(page.locator('.view-lines')).toContainText('beta-e2e-token', {
+      timeout: 15_000,
+    });
+    await expect(page.locator('button', { hasText: 'intro.tex *' })).toHaveCount(0);
 
     const afterReplace = fs.readFileSync(intro, 'utf8');
     expect(afterReplace).toContain('beta-e2e-token');
@@ -75,6 +80,11 @@ test.describe('12 · writer safety loop (search → replace → snapshot → dif
     await expect(page.getByText('Overwrite working tree with this snapshot?')).toBeVisible();
     await page.getByRole('button', { name: 'Yes, restore' }).click();
     await expect(page.getByText(/Restored \d+ file/)).toBeVisible({ timeout: 30_000 });
+    // the open editor buffer re-syncs to the restored disk content
+    await expect(page.locator('.view-lines')).toContainText('alpha-e2e-token', {
+      timeout: 15_000,
+    });
+    await expect(page.locator('.view-lines')).not.toContainText('beta-e2e-token');
 
     const afterRestore = fs.readFileSync(intro, 'utf8');
     expect(afterRestore).toContain('alpha-e2e-token');

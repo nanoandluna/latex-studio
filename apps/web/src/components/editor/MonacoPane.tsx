@@ -9,6 +9,7 @@ import { usePreviewStore } from '../../stores/previewStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { registerIndexCompletions } from '../../editor/indexCompletions';
+import { registerLatexLanguage } from '../../editor/latexLanguage';
 
 // Bundle Monaco locally — the app must work fully offline.
 loader.config({ monaco: monacoNs });
@@ -84,6 +85,10 @@ export function MonacoPane() {
       path={tab.path}
       value={tab.content}
       theme={dark ? 'latex-studio-dark' : 'vs'}
+      // Register the language + custom theme before the editor is created:
+      // applying `theme` while 'latex-studio-dark' is undefined makes Monaco
+      // silently fall back to light, and the prop never re-applies on its own.
+      beforeMount={(monaco) => registerLatexLanguage(monaco as unknown as typeof monacoNs)}
       onChange={(v) => {
         updateContent(tab.path, v ?? '');
         useProjectIndexStore.getState().pushBuffer(tab.path, v ?? '');

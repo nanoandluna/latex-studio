@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
+import { useEditorStore } from './editorStore';
 import type { SearchMatch, SearchOptions } from '@latex-studio/shared';
 
 interface SearchState {
@@ -149,6 +150,8 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
           snapshotId: res.snapshotId,
         },
       });
+      // disk truth changed — bring clean editor buffers back in sync
+      await useEditorStore.getState().reloadCleanTabs();
       return true;
     } catch (err) {
       set({ applying: false, previewToken: null, error: (err as Error).message });

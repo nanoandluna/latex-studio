@@ -4,6 +4,7 @@ import type * as Monaco from 'monaco-editor';
 import { loader } from '@monaco-editor/react';
 import * as monacoNs from 'monaco-editor';
 import { useSnapshotStore, reasonLabel, formatWhen } from '../../stores/snapshotStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { registerLatexLanguage, LATEX_LANG_ID } from '../../editor/latexLanguage';
 
 // Same offline bundle as the main editor.
@@ -39,6 +40,8 @@ export function HistoryPanel() {
 
   const [armedId, setArmedId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
+  const theme = useSettingsStore((s) => s.theme);
+  const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   useEffect(() => {
     void refresh();
@@ -73,6 +76,7 @@ export function HistoryPanel() {
           <DiffEditor
             height="100%"
             language={LATEX_LANG_ID}
+            theme={dark ? 'latex-studio-dark' : 'vs'}
             original={activeEntry.snapshotContent ?? ''}
             modified={activeEntry.currentContent ?? ''}
             beforeMount={(monaco) => registerLatexLanguage(monaco as unknown as typeof Monaco)}
