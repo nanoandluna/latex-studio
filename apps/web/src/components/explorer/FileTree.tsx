@@ -49,7 +49,7 @@ export function FileTree() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center justify-end px-2 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
+      <div className="flex h-8 shrink-0 items-center justify-end px-2 text-[13px] font-semibold tracking-wider text-zinc-500 uppercase">
         <div className="flex gap-1">
           <IconButton title="New file" onClick={() => handleCreate('file')} icon="+📄" />
           <IconButton title="New folder" onClick={() => handleCreate('directory')} icon="+📁" />
@@ -140,7 +140,7 @@ function LeafFile({ node, depth }: { node: FileNode; depth: number }) {
       </button>
       <button
         title="More actions"
-        className="absolute right-1 hidden rounded px-1 text-[10px] text-zinc-400 group-hover:block hover:text-zinc-700 dark:hover:text-zinc-200"
+        className="absolute right-1 hidden rounded px-1 text-xs text-zinc-400 group-hover:block hover:text-zinc-700 dark:hover:text-zinc-200"
         onClick={(e) => {
           e.stopPropagation();
           setMenuOpen((v) => !v);

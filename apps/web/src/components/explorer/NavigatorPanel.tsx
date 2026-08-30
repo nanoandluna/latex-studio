@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { StatisticsPanel } from '../statistics/StatisticsPanel';
@@ -39,6 +39,13 @@ export function NavigatorPanel() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [showStats, setShowStats] = useState(false);
+
+  // The command palette opens the statistics view through this event.
+  useEffect(() => {
+    const open = () => setShowStats(true);
+    window.addEventListener('latex-studio:show-stats', open);
+    return () => window.removeEventListener('latex-studio:show-stats', open);
+  }, []);
 
   const grouped = useMemo(() => {
     if (!index) return null;
@@ -156,7 +163,7 @@ export function NavigatorPanel() {
               </span>
             )}
             {typeof it.uses === 'number' && (
-              <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-400">
+              <span className="ml-auto shrink-0 font-mono text-xs text-zinc-400">
                 ×{it.uses}
               </span>
             )}
@@ -166,7 +173,7 @@ export function NavigatorPanel() {
               <button
                 key={k}
                 onClick={() => void openFileAtLine(u.file, u.line)}
-                className="block w-full rounded py-0.5 pr-2 pl-11 text-left text-[10px] text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="block w-full rounded py-0.5 pr-2 pl-11 text-left text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 ↳ {u.file}:{u.line}
               </button>
@@ -188,7 +195,7 @@ export function NavigatorPanel() {
           <button
             key={key}
             onClick={() => setShowStats(key === 'stats')}
-            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+            className={`rounded px-1.5 py-0.5 text-xs font-medium ${
               (key === 'stats') === showStats
                 ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
                 : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
@@ -215,7 +222,7 @@ export function NavigatorPanel() {
         return (
           <div key={key} className="mt-1">
             <button
-              className="flex w-full items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="flex w-full items-center gap-1 rounded px-2 py-0.5 text-[13px] font-semibold tracking-wide text-zinc-500 uppercase hover:bg-zinc-100 dark:hover:bg-zinc-800"
               onClick={() => setCollapsed((c) => ({ ...c, [key]: !c[key] }))}
             >
               <span className="w-3">{isCollapsed ? '▸' : '▾'}</span>

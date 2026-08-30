@@ -8,12 +8,10 @@ interface SnapshotState {
   loading: boolean;
   error: string | null;
 
-  /** Snapshot currently opened in the diff viewer. */
+  /** Snapshot whose changes are listed in the History panel. */
   selectedId: string | null;
   diff: SnapshotDiffEntry[];
   diffLoading: boolean;
-  /** Path inside `diff` shown in the editor, or null for the change list. */
-  openDiffPath: string | null;
 
   creating: boolean;
   restoringId: string | null;
@@ -22,9 +20,9 @@ interface SnapshotState {
   refresh: () => Promise<void>;
   create: (reason?: SnapshotReason, label?: string) => Promise<SnapshotManifest | null>;
   select: (id: string | null) => Promise<void>;
-  openDiff: (path: string | null) => void;
   restore: (id: string, files?: string[]) => Promise<boolean>;
   remove: (id: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const useSnapshotStore = create<SnapshotState>()((set, get) => ({
@@ -35,7 +33,6 @@ export const useSnapshotStore = create<SnapshotState>()((set, get) => ({
   selectedId: null,
   diff: [],
   diffLoading: false,
-  openDiffPath: null,
 
   creating: false,
   restoringId: null,
@@ -65,7 +62,7 @@ export const useSnapshotStore = create<SnapshotState>()((set, get) => ({
   },
 
   select: async (id) => {
-    set({ selectedId: id, openDiffPath: null, diff: [] });
+    set({ selectedId: id, diff: [] });
     if (!id) return;
     set({ diffLoading: true });
     try {
@@ -78,8 +75,6 @@ export const useSnapshotStore = create<SnapshotState>()((set, get) => ({
       set({ diffLoading: false, error: (err as Error).message });
     }
   },
-
-  openDiff: (path) => set({ openDiffPath: path }),
 
   restore: async (id, files) => {
     set({ restoringId: id, error: null });
@@ -103,12 +98,26 @@ export const useSnapshotStore = create<SnapshotState>()((set, get) => ({
   remove: async (id) => {
     try {
       await api.deleteSnapshot(id);
-      if (get().selectedId === id) set({ selectedId: null, diff: [], openDiffPath: null });
+      if (get().selectedId === id) set({ selectedId: null, diff: [] });
       await get().refresh();
     } catch (err) {
       set({ error: (err as Error).message || 'Delete failed' });
     }
   },
+
+  /** Workspace switched: nothing from the previous workspace may survive. */
+  reset: () =>
+    set({
+      snapshots: [],
+      loading: false,
+      error: null,
+      selectedId: null,
+      diff: [],
+      diffLoading: false,
+      creating: false,
+      restoringId: null,
+      lastRestore: null,
+    }),
 }));
 
 const REASON_LABELS: Record<string, string> = {

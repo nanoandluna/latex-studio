@@ -6,6 +6,22 @@ import { useBuildStore } from './buildStore';
 import { usePreviewStore } from './previewStore';
 import { useEditorStore } from './editorStore';
 import { useProjectIndexStore } from './projectIndexStore';
+import { useSnapshotStore } from './snapshotStore';
+import { useSearchStore } from './searchStore';
+import { useStatisticsStore } from './statisticsStore';
+import { useUiStore } from './uiStore';
+
+/** Reset every workspace-scoped store so nothing leaks across projects. */
+function resetWorkspaceScopedState(): void {
+  useBuildStore.getState().reset();
+  usePreviewStore.getState().setPdf(null);
+  useEditorStore.setState({ tabs: [], activePath: null, revealTarget: null, cursorLine: {} });
+  useProjectIndexStore.getState().reset();
+  useSnapshotStore.getState().reset();
+  useStatisticsStore.getState().reset();
+  useSearchStore.getState().clear();
+  useUiStore.getState().closeDiffWorkspace();
+}
 
 interface WorkspaceState {
   path: string | null;
@@ -50,12 +66,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         try {
           const opened = await api.openWorkspace(dirPath);
           // Reset all workspace-scoped state so nothing leaks across projects
-          useBuildStore.getState().reset();
-          usePreviewStore.getState().setPdf(null);
-          useEditorStore.setState({ tabs: [], activePath: null, revealTarget: null, cursorLine: {} });
-          useProjectIndexStore.getState().reset();
+          resetWorkspaceScopedState();
           set({ path: opened.path, name: opened.name, mainFile: opened.mainFile });
           await get().refreshTree();
+          // seed the status bar's snapshot age for the new workspace
+          void useSnapshotStore.getState().refresh().catch(() => {});
         } catch (err) {
           set({ error: (err as Error).message });
           throw err;
@@ -66,10 +81,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       closeWorkspace: async () => {
         await api.closeWorkspace();
-        useBuildStore.getState().reset();
-        usePreviewStore.getState().setPdf(null);
-        useEditorStore.setState({ tabs: [], activePath: null, revealTarget: null, cursorLine: {} });
-        useProjectIndexStore.getState().reset();
+        resetWorkspaceScopedState();
         set({ path: null, name: null, mainFile: null, tree: null });
       },
 

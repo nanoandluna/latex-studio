@@ -26,13 +26,13 @@ export function StatisticsPanel() {
   }, [data]);
 
   if (loading && !data) {
-    return <div className="p-3 text-[11px] text-zinc-400">Counting…</div>;
+    return <div className="p-3 text-[13px] text-zinc-400">Counting…</div>;
   }
   if (error) {
-    return <div className="p-3 text-[11px] text-red-600">{error}</div>;
+    return <div className="p-3 text-[13px] text-red-600">{error}</div>;
   }
   if (!data) {
-    return <div className="p-3 text-[11px] text-zinc-400">No statistics yet.</div>;
+    return <div className="p-3 text-[13px] text-zinc-400">No statistics yet.</div>;
   }
 
   const p = data.project;
@@ -40,7 +40,7 @@ export function StatisticsPanel() {
   return (
     <div className="space-y-3 p-3">
       <div>
-        <h3 className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
+        <h3 className="mb-1.5 text-[13px] font-semibold tracking-wide text-zinc-500 uppercase">
           Project
         </h3>
         <div className="grid grid-cols-2 gap-x-3 gap-y-1">
@@ -58,11 +58,11 @@ export function StatisticsPanel() {
       </div>
 
       <div>
-        <h3 className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
+        <h3 className="mb-1.5 text-[13px] font-semibold tracking-wide text-zinc-500 uppercase">
           {data.chapters.length > 0 ? 'Chapters' : 'Sections'} by words
         </h3>
         {rows.length === 0 && (
-          <p className="text-[11px] text-zinc-400">No sections found in this project.</p>
+          <p className="text-[13px] text-zinc-400">No sections found in this project.</p>
         )}
         <div className="space-y-1">
           {rows.map((r, i) => (
@@ -71,7 +71,7 @@ export function StatisticsPanel() {
         </div>
       </div>
 
-      <p className="text-[10px] leading-relaxed text-zinc-400">
+      <p className="text-xs leading-relaxed text-zinc-400">
         Counts cover body text only: comments, command arguments, the preamble and math
         environments are excluded. Section totals therefore sum to less than the project
         total.
@@ -91,9 +91,9 @@ function Metric({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-2 border-b border-zinc-100 pb-0.5 dark:border-zinc-800/60">
-      <span className="text-[10px] text-zinc-500">{label}</span>
+      <span className="text-xs text-zinc-500">{label}</span>
       <span
-        className={`font-mono text-[11px] ${
+        className={`font-mono text-[13px] ${
           primary ? 'font-semibold text-zinc-900 dark:text-zinc-100' : 'text-zinc-600 dark:text-zinc-400'
         }`}
       >
@@ -107,8 +107,8 @@ function ChapterBar({ row, onClick }: { row: StatisticsSection & { pct: number }
   return (
     <button onClick={onClick} className="block w-full text-left" title={`${row.file}:${row.line}`}>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-[10px] text-zinc-600 dark:text-zinc-400">{row.title}</span>
-        <span className="shrink-0 font-mono text-[10px] text-zinc-500">
+        <span className="truncate text-xs text-zinc-600 dark:text-zinc-400">{row.title}</span>
+        <span className="shrink-0 font-mono text-xs text-zinc-500">
           {row.stats.estimatedWords.toLocaleString()}
         </span>
       </div>

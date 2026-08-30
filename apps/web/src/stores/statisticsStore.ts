@@ -7,6 +7,7 @@ interface StatisticsState {
   loading: boolean;
   error: string | null;
   load: () => Promise<void>;
+  reset: () => void;
 }
 
 export const useStatisticsStore = create<StatisticsState>()((set) => ({
@@ -23,4 +24,7 @@ export const useStatisticsStore = create<StatisticsState>()((set) => ({
       set({ loading: false, error: (err as Error).message || 'Could not load statistics' });
     }
   },
+
+  /** Workspace switched — stale numbers from the previous project must not show. */
+  reset: () => set({ data: null, loading: false, error: null }),
 }));

@@ -1,6 +1,8 @@
 import { useEditorStore } from '../../stores/editorStore';
+import { useUiStore } from '../../stores/uiStore';
 import { MonacoPane } from './MonacoPane';
 import { ImageViewer } from './ImageViewer';
+import { DiffWorkspace } from './DiffWorkspace';
 
 const PREVIEWABLE = /\.(png|jpe?g|gif|svg|pdf)$/i;
 
@@ -17,22 +19,30 @@ export function EditorPane() {
   const setActive = useEditorStore((s) => s.setActive);
   const closeTab = useEditorStore((s) => s.closeTab);
   const isDirty = useEditorStore((s) => s.isDirty);
+  const diffSession = useUiStore((s) => s.diffSession);
+  const diffVisible = useUiStore((s) => s.diffVisible);
+  const showDiff = useUiStore((s) => s.showDiff);
+  const hideDiff = useUiStore((s) => s.hideDiff);
+  const closeDiffWorkspace = useUiStore((s) => s.closeDiffWorkspace);
 
   const activeTab = tabs.find((t) => t.path === activePath) ?? null;
-  const showPreview = !!activeTab && PREVIEWABLE.test(activeTab.path);
+  const showPreview = !diffVisible && !!activeTab && PREVIEWABLE.test(activeTab.path);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      {tabs.length > 0 && (
+      {(tabs.length > 0 || diffSession) && (
         <div data-testid="tab-strip" className="flex h-9 shrink-0 items-stretch overflow-x-auto border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-[#1c1c1f]">
           {tabs.map((t) => {
             const name = t.path.split('/').pop()!;
             const dirty = isDirty(t);
-            const active = t.path === activePath;
+            const active = !diffVisible && t.path === activePath;
             return (
               <button
                 key={t.path}
-                onClick={() => setActive(t.path)}
+                onClick={() => {
+                  setActive(t.path);
+                  hideDiff();
+                }}
                 title={t.path}
                 className={`group flex items-center gap-2 border-r border-zinc-200 px-3 text-xs whitespace-nowrap dark:border-zinc-800 ${
                   active
@@ -70,10 +80,39 @@ export function EditorPane() {
               </button>
             );
           })}
+          {diffSession && (
+            <button
+              onClick={showDiff}
+              title={`Snapshot diff (read-only) — ${diffSession.snapshotId}`}
+              className={`group flex items-center gap-2 border-r border-zinc-200 px-3 text-xs whitespace-nowrap dark:border-zinc-800 ${
+                diffVisible
+                  ? 'bg-white text-zinc-900 dark:bg-[#18181b] dark:text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+              }`}
+            >
+              <span className="font-mono text-[10px] opacity-60">DIFF</span>
+              <span>
+                Diff: {diffSession.label} → Now
+              </span>
+              <span
+                role="button"
+                aria-label="Close diff"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeDiffWorkspace();
+                }}
+                className="ml-1 rounded px-1 opacity-40 hover:bg-zinc-200 hover:opacity-100 dark:hover:bg-zinc-700"
+              >
+                ×
+              </span>
+            </button>
+          )}
         </div>
       )}
       <div className="min-h-0 flex-1">
-        {showPreview && activeTab ? (
+        {diffVisible && diffSession ? (
+          <DiffWorkspace key={diffSession.snapshotId} />
+        ) : showPreview && activeTab ? (
           <ImageViewer path={activeTab.path} />
         ) : (
           <MonacoPane />

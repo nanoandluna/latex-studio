@@ -205,7 +205,7 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 | Port 3210 busy | Set `PORT=<n>` env var. |
 | SyncTeX jump does nothing | Rebuild once (needs `-synctex=1` output). |
 
-## Known limitations (v0.4.1)
+## Known limitations (v0.4.2)
 
 - PDF search highlights matches per text-item; hyphenation across line ends may still be missed.
 - Single workspace at a time; single user by design.
@@ -225,10 +225,10 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 - ~~V0.3.x — Research Workspace Intelligence · Intelligence Hardening~~ ✅
 - ~~V0.4.0 — Writer's Safety + Search~~ ✅ (Snapshot · History/Diff/Restore · Project Search & Replace · Paper Statistics · ZIP Export/Import)
 - ~~V0.4.1 — Review hardening~~ ✅ (P0 partial-restore fix · fs.watch bulk-write perf overhaul · full search/replace/snapshot/restore E2E · auto-save settings UI)
-- V0.4.2 — SSE Build Progress · large-project polish · crash recovery regression
-- V0.5.0 — Research Writing Workspace: Citation Workspace · Terminology Consistency/Glossary · PDF Thumbnails · Reading Position Memory · 中文界面
-- V0.6.0 — Literature Bridge: Zotero/Better BibTeX workflow deepening · literature PDF reading
-- V0.7.0 — Long-term Reliability: snapshot format evolution · migration · backup/recovery hardening
+- ~~V0.4.2 — UX & Release Polish~~ ✅ (Diff in main workspace · simplified header · typography & reading comfort · typed status bar · build progress UX · recovery hardening)
+- V0.5.0 — Research Writing Workspace: Paper Overview · Citation Workspace & Coverage · Reading Workspace · Terminology Consistency · 中文界面
+- V0.6.0 — Literature Bridge: Zotero / Better BibTeX seamless .bib workflow · citation context
+- V0.7.0 — Reliability: snapshot format evolution · migration · backup/recovery hardening
 - V1.0 — Graduate Research Workspace
 
 Product razor: 只做让研究生更快、更稳定、更清晰地完成一篇高质量论文的功能。

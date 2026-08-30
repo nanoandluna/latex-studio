@@ -51,7 +51,7 @@ export function useHotkeys(): void {
 }
 
 /** Reveal the sidebar if it is hidden, then ask it to switch tabs. */
-export function showPanel(panel: 'search' | 'history'): void {
+export function showPanel(panel: 'search' | 'history' | 'navigator'): void {
   const ui = useUiStore.getState();
   if (!ui.explorerVisible) ui.toggleExplorer();
   window.dispatchEvent(new CustomEvent('latex-studio:show-panel', { detail: { panel } }));

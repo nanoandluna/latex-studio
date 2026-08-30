@@ -10,6 +10,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { registerIndexCompletions } from '../../editor/indexCompletions';
 import { registerLatexLanguage } from '../../editor/latexLanguage';
+import { editorTokens } from '../../editor/tokens';
 
 // Bundle Monaco locally — the app must work fully offline.
 loader.config({ monaco: monacoNs });
@@ -76,6 +77,8 @@ export function MonacoPane() {
     );
   }
 
+  const tokens = editorTokens();
+
   return (
     <Editor
       key={tab.path}
@@ -95,7 +98,8 @@ export function MonacoPane() {
       }}
       onMount={handleMount}
       options={{
-        fontSize: 14,
+        fontSize: tokens.fontSize,
+        lineHeight: tokens.lineHeight,
         minimap: { enabled: true },
         automaticLayout: true,
         wordWrap: 'on',

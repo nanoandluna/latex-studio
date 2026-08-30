@@ -22,6 +22,8 @@ interface BuildState {
   status: BuildStatus;
   buildId: string | null;
   durationMs: number;
+  /** Wall-clock ms timestamp of when the current/last build started. */
+  startedAt: number | null;
   problems: Problem[];
   log: string;
   error: string | null;
@@ -45,6 +47,7 @@ export const useBuildStore = create<BuildState>()((set, get) => ({
   status: 'idle',
   buildId: null,
   durationMs: 0,
+  startedAt: null,
   problems: [],
   log: '',
   error: null,
@@ -56,14 +59,14 @@ export const useBuildStore = create<BuildState>()((set, get) => ({
     const compiler = useSettingsStore.getState().compiler;
     if (!path) return;
     if (!mainFile) {
-      set({ error: 'No main .tex file detected. Set one in the toolbar.' });
+      set({ error: 'No main .tex file detected. Set one in Settings.' });
       return;
     }
     if (get().status === 'running' || get().status === 'starting' || get().status === 'queued') {
       set({ dirtySinceBuild: true });
       return;
     }
-    set({ status: 'starting', error: null });
+    set({ status: 'starting', startedAt: Date.now(), error: null });
     try {
       const rec: BuildRecord = await api.build(mainFile, compiler);
       applyRecord(set, rec);
@@ -114,6 +117,7 @@ export const useBuildStore = create<BuildState>()((set, get) => ({
       status: 'idle',
       buildId: null,
       durationMs: 0,
+      startedAt: null,
       problems: [],
       log: '',
       error: null,

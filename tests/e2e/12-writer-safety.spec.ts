@@ -67,13 +67,15 @@ test.describe('12 · writer safety loop (search → replace → snapshot → dif
     await page.getByRole('tab', { name: 'History' }).click();
     await page.getByText('before replace all').first().click();
 
-    // 6. Its diff lists the modified file; clicking opens the inline diff view
+    // 6. Its diff opens as a read-only tab in the main editor area
     const diffRow = page.locator('button', { hasText: 'sections/intro.tex' }).first();
     await expect(diffRow).toBeVisible();
     await expect(diffRow).toHaveText(/M\s*sections\/intro\.tex/);
     await diffRow.click();
+    await expect(page.getByRole('button', { name: /Diff: .*→ Now/ })).toBeVisible();
     await expect(page.locator('.monaco-diff-editor')).toBeVisible({ timeout: 15_000 });
-    await page.getByRole('button', { name: '← Back' }).click();
+    // close the diff tab — the sidebar still holds the snapshot detail
+    await page.getByRole('button', { name: 'Close diff', exact: true }).click();
 
     // 7. Restore is a two-click confirmation, and puts the original bytes back
     await page.getByRole('button', { name: 'Restore this snapshot' }).click();
@@ -227,26 +229,31 @@ test.describe('14 · paper statistics', () => {
  * reachable from the UI (header controls, mirrored as palette commands).
  */
 test.describe('15 · auto-save settings entry points', () => {
-  test('header controls exist and palette commands switch them', async ({ page }) => {
+  test('settings menu and palette commands switch auto-save controls', async ({ page }) => {
     await page.goto(BASE);
     await openWorkspaceViaApi(page, tempFixture('multi-file'));
 
-    // defaults: both off
-    const saveSelect = page.getByRole('combobox').filter({ hasText: 'Auto save:' });
+    // open the ⚙ settings menu — defaults: both off
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const saveSelect = page.getByRole('combobox', { name: 'Auto save', exact: true });
     await expect(saveSelect).toHaveValue('off');
-    const snapCheckbox = page.getByRole('checkbox', { name: 'Snap on blur' });
+    const snapCheckbox = page.getByRole('checkbox', { name: 'Snapshot on focus loss' });
     await expect(snapCheckbox).not.toBeChecked();
 
-    // palette command changes the policy — the header select follows
+    // palette command changes the policy — the settings select follows
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Control+Shift+P');
     await page.getByPlaceholder('Type a command…').fill('Auto Save: On focus loss');
     await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Settings' }).click();
     await expect(saveSelect).toHaveValue('focus-loss');
 
     // palette toggle flips the auto-snapshot switch
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Control+Shift+P');
     await page.getByPlaceholder('Type a command…').fill('Auto Snapshot');
     await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Settings' }).click();
     await expect(snapCheckbox).toBeChecked();
   });
 });

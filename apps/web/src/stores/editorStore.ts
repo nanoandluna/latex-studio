@@ -8,11 +8,32 @@ export interface EditorTab {
   savedContent: string;
 }
 
+/**
+ * The save state of the workspace as shown in the status bar. Derived — never
+ * string-matched from buttons or titles.
+ */
+export type DocumentSaveState = 'clean' | 'dirty' | 'saving' | 'error';
+
+export function documentSaveState(s: {
+  saving: number;
+  lastSaveError: string | null;
+  tabs: EditorTab[];
+  isDirty: (tab: EditorTab) => boolean;
+}): DocumentSaveState {
+  if (s.saving > 0) return 'saving';
+  if (s.lastSaveError) return 'error';
+  return s.tabs.some((t) => s.isDirty(t)) ? 'dirty' : 'clean';
+}
+
 interface EditorState {
   tabs: EditorTab[];
   activePath: string | null;
   cursorLine: Record<string, number>;
   revealTarget: { path: string; line: number; token: number } | null;
+  /** In-flight save count across all tabs. */
+  saving: number;
+  /** Last save error message; cleared by the next attempted save. */
+  lastSaveError: string | null;
 
   openFile: (path: string, line?: number) => Promise<void>;
   openFileAtLine: (path: string, line: number) => Promise<void>;
@@ -34,18 +55,26 @@ export const useEditorStore = create<EditorState>()(
       activePath: null,
       cursorLine: {},
       revealTarget: null,
+      saving: 0,
+      lastSaveError: null,
 
       openFile: async (path) => {
         const existing = get().tabs.find((t) => t.path === path);
-        if (!existing) {
-          const res = await api.readFile(path);
-          set({
-            tabs: [...get().tabs, { path, content: res.content, savedContent: res.content }],
-            activePath: path,
-          });
-        } else {
+        if (existing) {
           set({ activePath: path });
+          return;
         }
+        const res = await api.readFile(path);
+        // a concurrent open of the same path (e.g. a double-click firing two
+        // clicks) may have landed while we were reading — never add a twin
+        if (get().tabs.some((t) => t.path === path)) {
+          set({ activePath: path });
+          return;
+        }
+        set({
+          tabs: [...get().tabs, { path, content: res.content, savedContent: res.content }],
+          activePath: path,
+        });
       },
 
       openFileAtLine: async (path, line) => {
@@ -73,12 +102,19 @@ export const useEditorStore = create<EditorState>()(
       saveFile: async (path) => {
         const tab = get().tabs.find((t) => t.path === path);
         if (!tab) return;
-        await api.saveFile(path, tab.content);
-        set({
-          tabs: get().tabs.map((t) =>
+        set((s) => ({ saving: s.saving + 1, lastSaveError: null }));
+        try {
+          await api.saveFile(path, tab.content);
+        } catch (err) {
+          set((s) => ({ saving: s.saving - 1, lastSaveError: (err as Error).message || 'Save failed' }));
+          throw err;
+        }
+        set((s) => ({
+          saving: s.saving - 1,
+          tabs: s.tabs.map((t) =>
             t.path === path ? { ...t, savedContent: t.content } : t
           ),
-        });
+        }));
         window.dispatchEvent(new CustomEvent('latex-studio:saved', { detail: { path } }));
       },
 

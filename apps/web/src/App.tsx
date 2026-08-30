@@ -15,6 +15,7 @@ import { useUiStore } from './stores/uiStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useBuildStore } from './stores/buildStore';
 import { useProjectIndexStore } from './stores/projectIndexStore';
+import { useSnapshotStore } from './stores/snapshotStore';
 
 export default function App() {
   const workspacePath = useWorkspaceStore((s) => s.path);
@@ -23,8 +24,13 @@ export default function App() {
   const refreshLatest = useBuildStore((s) => s.refreshLatest);
   const explorerVisible = useUiStore((s) => s.explorerVisible);
   const bottomPanelHeight = useUiStore((s) => s.bottomPanelHeight);
+  const bottomPanelVisible = useUiStore((s) => s.bottomPanelVisible);
+  const previewVisible = useUiStore((s) => s.previewVisible);
   const setBottomPanelHeight = useUiStore((s) => s.setBottomPanelHeight);
   const theme = useSettingsStore((s) => s.theme);
+  const buildStatus = useBuildStore((s) => s.status);
+  const building =
+    buildStatus === 'running' || buildStatus === 'starting' || buildStatus === 'queued';
 
   const [explorerWidth, setExplorerWidth] = useState(240);
   const [previewWidth, setPreviewWidth] = useState(480);
@@ -49,7 +55,11 @@ export default function App() {
 
   // Restore session: server remembers the last workspace
   useEffect(() => {
-    void bootstrap().then(() => refreshLatest());
+    void bootstrap().then(() => {
+      refreshLatest();
+      // seed the status bar's snapshot age for the restored workspace
+      void useSnapshotStore.getState().refresh().catch(() => {});
+    });
   }, [bootstrap, refreshLatest]);
 
   // Refresh the project index whenever the file tree changes (open/save/etc).
@@ -60,6 +70,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <Header />
+      {workspacePath && building && <div className="build-progress shrink-0" aria-hidden />}
 
       {!workspacePath ? (
         <EmptyState />
@@ -79,22 +90,30 @@ export default function App() {
               <EditorPane />
             </main>
 
-            <Splitter orientation="vertical" onResize={(d) => setPreviewWidth((w) => Math.min(window.innerWidth - 400, Math.max(280, w - d)))} />
-            <aside className="shrink-0 overflow-hidden" style={{ width: previewWidth }}>
-              <PdfPreview />
-            </aside>
+            {previewVisible && (
+              <>
+                <Splitter orientation="vertical" onResize={(d) => setPreviewWidth((w) => Math.min(window.innerWidth - 400, Math.max(280, w - d)))} />
+                <aside className="shrink-0 overflow-hidden" style={{ width: previewWidth }}>
+                  <PdfPreview />
+                </aside>
+              </>
+            )}
           </div>
 
-          <Splitter
-            orientation="horizontal"
-            onResize={(d) => {
-              const cur = useUiStore.getState().bottomPanelHeight;
-              setBottomPanelHeight(Math.min(Math.max(cur - d, 80), Math.floor(window.innerHeight * 0.6)));
-            }}
-          />
-          <div className="shrink-0 overflow-hidden border-t border-zinc-200 dark:border-zinc-800" style={{ height: bottomPanelHeight }}>
-            <ProblemsPanel />
-          </div>
+          {bottomPanelVisible && (
+            <>
+              <Splitter
+                orientation="horizontal"
+                onResize={(d) => {
+                  const cur = useUiStore.getState().bottomPanelHeight;
+                  setBottomPanelHeight(Math.min(Math.max(cur - d, 80), Math.floor(window.innerHeight * 0.6)));
+                }}
+              />
+              <div className="shrink-0 overflow-hidden border-t border-zinc-200 dark:border-zinc-800" style={{ height: bottomPanelHeight }}>
+                <ProblemsPanel />
+              </div>
+            </>
+          )}
         </>
       )}
 

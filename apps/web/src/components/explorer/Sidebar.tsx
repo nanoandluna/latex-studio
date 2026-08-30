@@ -46,7 +46,7 @@ export function Sidebar() {
             role="tab"
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
-            className={`shrink-0 px-2 text-[11px] font-medium ${
+            className={`shrink-0 px-1.5 text-xs font-medium ${
               tab === t.key
                 ? 'border-b-2 border-blue-500 text-zinc-900 dark:text-zinc-100'
                 : 'border-b-2 border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'

@@ -7,6 +7,7 @@ import { useSettingsStore, type CompilerChoice } from '../../stores/settingsStor
 import { useSnapshotStore } from '../../stores/snapshotStore';
 import { AUTO_SAVE_OPTIONS } from '../../hooks/useAutoSave';
 import { showPanel } from '../../hooks/useHotkeys';
+import { api } from '../../api/client';
 
 interface Command {
   id: string;
@@ -76,6 +77,64 @@ export function CommandPalette() {
         },
       },
       { id: 'open-history', label: 'Open Snapshot History', run: () => showPanel('history') },
+      { id: 'search-project', label: 'Search in Project', hint: 'Ctrl+Shift+F', run: () => showPanel('search') },
+      {
+        id: 'show-statistics',
+        label: 'Show Statistics',
+        run: () => {
+          showPanel('navigator');
+          window.dispatchEvent(new CustomEvent('latex-studio:show-stats'));
+        },
+      },
+      {
+        id: 'export-project',
+        label: 'Export Project (ZIP)',
+        run: () => {
+          const a = document.createElement('a');
+          a.href = api.exportProjectUrl();
+          a.download = '';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        },
+      },
+      {
+        id: 'import-project',
+        label: 'Import Project (ZIP)…',
+        run: () => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.zip,application/zip';
+          input.onchange = async () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            const ws = useWorkspaceStore.getState();
+            if (!ws.path) return;
+            if (!window.confirm(`Import "${file.name}" into the current workspace "${ws.name}"?`)) return;
+            try {
+              await api.importProject(file, false);
+            } catch (err) {
+              const msg = (err as Error).message || '';
+              if (/not empty|conflict/i.test(msg)) {
+                if (!window.confirm('The workspace is not empty — merge the archive into it? Existing files with the same path will be overwritten.')) return;
+                try {
+                  await api.importProject(file, true);
+                } catch (e2) {
+                  window.alert(`Import failed: ${(e2 as Error).message}`);
+                  return;
+                }
+              } else {
+                window.alert(`Import failed: ${msg}`);
+                return;
+              }
+            }
+            await ws.refreshTree();
+          };
+          input.click();
+        },
+      },
+      { id: 'toggle-preview', label: 'Toggle PDF Preview', run: () => ui.togglePreview() },
+      { id: 'toggle-problems', label: 'Toggle Problems Panel', run: () => ui.toggleBottomPanel() },
       {
         id: 'graph-debug',
         label: 'Developer: Dump Graph Debug to Output',

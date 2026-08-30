@@ -44,11 +44,11 @@ export function OutlinePanel() {
           className="flex w-full items-baseline gap-2 rounded px-2 py-0.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
           style={{ paddingLeft: `${8 + s.level * 12}px` }}
         >
-          <span className="shrink-0 font-mono text-[10px] text-zinc-400">{s.label}</span>
+          <span className="shrink-0 font-mono text-xs text-zinc-400">{s.label}</span>
           <span className="truncate">{s.title}</span>
         </button>
       ))}
-      <div className="px-2 pt-1 text-[10px] text-zinc-500 dark:text-zinc-600">
+      <div className="px-2 pt-1 text-xs text-zinc-500 dark:text-zinc-600">
         {LEVEL_LABEL.slice(0, 3).join(' · ')} … parsed from {new Set(index.sections.map((s) => s.file)).size} file(s)
       </div>
     </div>
