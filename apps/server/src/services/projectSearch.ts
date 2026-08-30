@@ -3,6 +3,7 @@ import type { SearchMatch, SearchOptions } from '@latex-studio/shared';
 import { safeResolve, safeRealpathInside } from '../utils/paths.js';
 import { collectSourceFiles } from '../utils/walkWorkspace.js';
 import { ApiError } from '../errors.js';
+import { projectIndexService } from './projectIndexService.js';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // skip files > 2MB
 const MAX_MATCHES = 1000;
@@ -92,6 +93,28 @@ export async function searchWorkspace(
   const byFile = new Set<string>();
   let truncated = false;
 
+  // V0.5 Search → Context: nearest preceding heading per (file, line), from
+  // the Project Graph snapshot. No extra scan; absent index → no annotation.
+  const sectionsByFile = new Map<string, { line: number; title: string }[]>();
+  try {
+    const index = projectIndexService.getSnapshot();
+    for (const s of index?.sections ?? []) {
+      const list = sectionsByFile.get(s.file) ?? [];
+      list.push({ line: s.line, title: s.title });
+      sectionsByFile.set(s.file, list);
+    }
+  } catch {
+    /* no workspace index yet */
+  }
+  const sectionFor = (file: string, line: number): string | undefined => {
+    let best: string | undefined;
+    for (const s of sectionsByFile.get(file) ?? []) {
+      if (s.line > line) break;
+      best = s.title;
+    }
+    return best;
+  };
+
   for (const rel of files) {
     // A pathological pattern can make one match take arbitrarily long, and a
     // running regex cannot be interrupted. Checking the budget between files
@@ -120,6 +143,7 @@ export async function searchWorkspace(
             column: m.index + 1,
             preview: lines[li].trim().slice(0, 160),
             length: m[0].length,
+            section: sectionFor(rel, li + 1),
           });
           hitsInFile++;
           if (matches.length >= MAX_MATCHES) {

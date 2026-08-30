@@ -278,6 +278,27 @@ export const api = {
   citationWorkspace: () =>
     request<import('@latex-studio/shared').CitationWorkspaceResponse>('/api/paper/citations'),
 
+  // ---- V0.5: Terminology ----
+  terminology: () =>
+    request<{ terms: import('@latex-studio/shared').TerminologyTerm[] }>('/api/paper/terminology'),
+  saveTerminology: (terms: import('@latex-studio/shared').TerminologyTerm[]) =>
+    request<{ terms: import('@latex-studio/shared').TerminologyTerm[] }>('/api/paper/terminology', {
+      method: 'PUT',
+      body: JSON.stringify({ terms }),
+    }),
+  terminologyHits: () =>
+    request<{ hits: import('@latex-studio/shared').TerminologyHit[]; scannedFiles: number }>(
+      '/api/paper/terminology/hits'
+    ),
+
+  // ---- V0.5: Reading position ----
+  readingState: () => request<Record<string, number>>('/api/reading-state'),
+  saveReadingState: (mainFile: string, page: number) =>
+    request<{ ok: boolean }>('/api/reading-state', {
+      method: 'PUT',
+      body: JSON.stringify({ mainFile, page }),
+    }),
+
   // ---- V0.4: Project ZIP ----
   exportProjectUrl: () => '/api/project/export',
 

@@ -4,7 +4,57 @@ All notable changes to LaTeX Studio. Versions follow semver; every release gate
 (`pnpm release:check`) runs the full unit + integration + security + real-LaTeX
 + E2E suite before a version is tagged.
 
+## 0.5.0 — Research Writing Workspace
+
+Focus: the paper becomes a first-class object. Four modules, all derived from
+the existing Project Graph — no new scanning infrastructure.
+
+### Paper Overview
+- **Paper Overview** dashboard (Navigator → Overview): structure, content
+  (CJK/Latin), assets, references (with undefined citations/references
+  surfaced in amber) and live diagnostics — plus a per-chapter breakdown
+  (CJK, citations, figures/tables/equations) whose rows jump to the source.
+  `GET /api/paper/overview`; zero second scans.
+
+### Citation Workspace
+- **Citation Workspace** (Navigator → Citations): All / Used / Unused /
+  Undefined / Duplicate groups with per-key bib metadata, first usage and
+  usage locations. Each usage carries chapter/section attribution and a
+  one-line citation context. `Open Bib` and `Show Usages` actions. Strictly
+  read-only — the .bib file stays with Zotero / Better BibTeX.
+- Duplicate bib keys are now flagged by the parser instead of being dropped
+  silently.
+
+### Reading Workspace
+- **PDF thumbnails** rail (lazy-rendered, click to jump, current page marked).
+- **Outline rail** — the paper's sections; clicking jumps to the mapped PDF
+  page via SyncTeX.
+- **Reading position** persisted per workspace (`reading-state.json`) and
+  restored when the PDF reopens.
+
+### Terminology Consistency
+- **Terminology** (Navigator → Terms): user-defined preferred terms with
+  variants / acronyms / forbidden forms; rule-based whole-word scan flags
+  inconsistencies with file:line and context (no AI). Hits merge into the
+  Problems panel and are clickable.
+
+### Search → Context
+- Project search results are annotated with the section they appear in.
+
+### Under the hood
+- Navigator sub-views moved into the ui store — palette commands can open
+  them before the panel mounts (fixes a silent dispatch-then-listen race).
+
 ## 0.4.2 — UX & Release Polish
+
+Focus: comfort for long writing sessions, a usable diff, honest status, and a
+consistent release. No new research features by design.
+
+### Fixes (post-tag follow-ups folded into this release)
+- The main editor now registers its LaTeX language and dark theme up front —
+  a first mount used to fall back to a light editor in dark mode until the
+  History panel had been opened.
+- A concurrent double-click can no longer open duplicate editor tabs.
 
 Focus: comfort for long writing sessions, a usable diff, honest status, and a
 consistent release. No new research features by design.

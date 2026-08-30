@@ -205,7 +205,12 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 | Port 3210 busy | Set `PORT=<n>` env var. |
 | SyncTeX jump does nothing | Rebuild once (needs `-synctex=1` output). |
 
-## Known limitations (v0.4.2)
+## Known limitations (v0.5.0)
+
+- Chapter attribution (Paper Overview / Statistics) follows same-file line ranges; prose pulled in from other files via `\input` is not attributed to the chapter, so chapter totals sum to less than the project total (cross-file attribution is planned for V0.5.1).
+- The PDF outline rail sorts sections per file, not by true include order across files.
+- Citation Workspace is read-only by design; the .bib file belongs to your reference manager (Zotero / Better BibTeX).
+- Reading position is stored per workspace in `.latex-studio/cache/reading-state.json` and resets when the cache is cleared.
 
 - PDF search highlights matches per text-item; hyphenation across line ends may still be missed.
 - Single workspace at a time; single user by design.
@@ -226,7 +231,8 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 - ~~V0.4.0 — Writer's Safety + Search~~ ✅ (Snapshot · History/Diff/Restore · Project Search & Replace · Paper Statistics · ZIP Export/Import)
 - ~~V0.4.1 — Review hardening~~ ✅ (P0 partial-restore fix · fs.watch bulk-write perf overhaul · full search/replace/snapshot/restore E2E · auto-save settings UI)
 - ~~V0.4.2 — UX & Release Polish~~ ✅ (Diff in main workspace · simplified header · typography & reading comfort · typed status bar · build progress UX · recovery hardening)
-- V0.5.0 — Research Writing Workspace: Paper Overview · Citation Workspace & Coverage · Reading Workspace · Terminology Consistency · 中文界面
+- ~~V0.5.0 — Research Writing Workspace~~ ✅ (Paper Overview · Citation Workspace · Reading Workspace: thumbnails/outline/reading position · Terminology Consistency · search section context)
+- V0.5.1 — Research Workflow Hardening: cross-file chapter attribution · BibLaTeX edge cases · Navigator citation-group migration
 - V0.6.0 — Literature Bridge: Zotero / Better BibTeX seamless .bib workflow · citation context
 - V0.7.0 — Reliability: snapshot format evolution · migration · backup/recovery hardening
 - V1.0 — Graduate Research Workspace

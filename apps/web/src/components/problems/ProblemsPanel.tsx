@@ -12,6 +12,7 @@ export function ProblemsPanel() {
   const writingChecksEnabled = useSettingsStore((s) => s.writingChecks);
   const setWritingChecks = useSettingsStore((s) => s.setWritingChecks);
   const [writing, setWriting] = useState<import('@latex-studio/shared').WritingDiagnostic[]>([]);
+  const [termHits, setTermHits] = useState<import('@latex-studio/shared').TerminologyHit[]>([]);
   const buildProblems = useBuildStore((s) => s.problems);
 
   const log = useBuildStore((s) => s.log);
@@ -55,8 +56,30 @@ export function ProblemsPanel() {
     );
     return () => { cancelled = true; };
   }, [writingChecksEnabled, index]);
+
+  // V0.5 terminology consistency hits (warning-tier, same toggle)
+  useEffect(() => {
+    if (!writingChecksEnabled || !index) {
+      setTermHits([]);
+      return;
+    }
+    let cancelled = false;
+    import('../../api/client').then(({ api }) =>
+      api.terminologyHits().then((r) => {
+        if (!cancelled) setTermHits(r.hits);
+      }).catch(() => {})
+    );
+    return () => { cancelled = true; };
+  }, [writingChecksEnabled, index]);
   const problems: (Problem & { source: 'build' | 'index' })[] = [
     ...buildProblems.map((p) => ({ ...p, source: 'build' as const })),
+    ...termHits.map((h) => ({
+      severity: 'warning' as const,
+      message: `[terminology] "${h.matched}" → ${h.preferred}${h.forbidden ? ' (forbidden)' : ''}`,
+      file: h.file,
+      line: h.line,
+      source: 'index' as const,
+    })),
     ...writing.map((d) => ({
       severity: d.severity,
       message: `[writing] ${d.message} (${d.code})`,

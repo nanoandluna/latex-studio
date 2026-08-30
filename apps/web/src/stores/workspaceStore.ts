@@ -11,6 +11,7 @@ import { useSearchStore } from './searchStore';
 import { useStatisticsStore } from './statisticsStore';
 import { usePaperOverviewStore } from './paperOverviewStore';
 import { useCitationWorkspaceStore } from './citationWorkspaceStore';
+import { useTerminologyStore } from './terminologyStore';
 import { useUiStore } from './uiStore';
 
 /** Reset every workspace-scoped store so nothing leaks across projects. */
@@ -23,6 +24,7 @@ function resetWorkspaceScopedState(): void {
   useStatisticsStore.getState().reset();
   usePaperOverviewStore.getState().reset();
   useCitationWorkspaceStore.getState().reset();
+  useTerminologyStore.getState().reset();
   useSearchStore.getState().clear();
   useUiStore.getState().closeDiffWorkspace();
 }

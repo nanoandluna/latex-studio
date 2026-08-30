@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type BottomTab = 'problems' | 'output';
-type NavigatorView = 'symbols' | 'overview' | 'citations' | 'stats';
+type NavigatorView = 'symbols' | 'overview' | 'citations' | 'terms' | 'stats';
 
 /**
  * A read-only snapshot diff opened in the main editor area. Pure view state:

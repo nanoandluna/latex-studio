@@ -103,6 +103,14 @@ export function CommandPalette() {
         },
       },
       {
+        id: 'show-terminology',
+        label: 'Show Terminology',
+        run: () => {
+          showPanel('navigator');
+          ui.setNavigatorView('terms');
+        },
+      },
+      {
         id: 'export-project',
         label: 'Export Project (ZIP)',
         run: () => {

@@ -5,6 +5,8 @@ import { authedFetch, api } from '../../api/client';
 import { usePreviewStore } from '../../stores/previewStore';
 import { useBuildStore } from '../../stores/buildStore';
 import { useEditorStore } from '../../stores/editorStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import { useProjectIndexStore } from '../../stores/projectIndexStore';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -22,6 +24,8 @@ export function PdfPreview() {
   const setScale = usePreviewStore((s) => s.setScale);
   const setPage = usePreviewStore((s) => s.setPage);
   const setPageCount = usePreviewStore((s) => s.setPageCount);
+  const mainFile = useWorkspaceStore((s) => s.mainFile);
+  const index = useProjectIndexStore((s) => s.index);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -34,6 +38,9 @@ export function PdfPreview() {
   const [error, setError] = useState<string | null>(null);
   const [renderVersion, setRenderVersion] = useState(0);
   const suppressScroll = useRef(false);
+  // V0.5 Reading Workspace rails
+  const [thumbsOpen, setThumbsOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
 
   // Search state
   const [query, setQuery] = useState('');
@@ -295,6 +302,49 @@ export function PdfPreview() {
     [pageCount, scrollToPage]
   );
 
+  // ---- V0.5 Reading Workspace: remember where the reader stopped -----------
+  useEffect(() => {
+    if (!doc || !mainFile) return;
+    let cancelled = false;
+    api
+      .readingState()
+      .then((state) => {
+        const saved = state[mainFile];
+        if (cancelled || !saved || saved <= 1 || saved > doc.numPages) return;
+        goToPage(saved);
+        // re-anchor once neighbouring pages have real heights
+        setTimeout(() => {
+          if (!cancelled) goToPage(saved);
+        }, 700);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, mainFile, goToPage]);
+
+  useEffect(() => {
+    if (!doc || !mainFile || page < 1) return;
+    const t = setTimeout(() => {
+      void api.saveReadingState(mainFile, page).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [page, doc, mainFile]);
+
+  const jumpToSection = useCallback(
+    async (file: string, line: number) => {
+      const buildId = useBuildStore.getState().buildId;
+      if (!buildId) return;
+      try {
+        const hit = await api.synctexForward(buildId, file, line);
+        if (hit?.page) goToPage(hit.page);
+      } catch {
+        /* no mapping for this section yet */
+      }
+    },
+    [goToPage]
+  );
+
   // ---- SyncTeX inverse: click a PDF location → jump to source -------------
   const handleCanvasClick = useCallback(
     async (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -384,6 +434,20 @@ export function PdfPreview() {
         <div className="flex-1" />
         <button
           className={tbBtn}
+          title="Page thumbnails"
+          onClick={() => setThumbsOpen((v) => !v)}
+        >
+          ▦
+        </button>
+        <button
+          className={tbBtn}
+          title="Outline — click a section to jump to its page"
+          onClick={() => setOutlineOpen((v) => !v)}
+        >
+          ☰
+        </button>
+        <button
+          className={tbBtn}
           title="Rotate"
           onClick={() => usePreviewStore.setState({ rotation: (rotation + 90) % 360 })}
         >
@@ -403,8 +467,10 @@ export function PdfPreview() {
         <a className={tbBtn} href={pdfUrl} download title="Download PDF">⭳</a>
       </div>
 
-      {/* Pages */}
-      <div ref={containerRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-auto p-3">
+      {/* Pages, flanked by the optional thumbnail and outline rails */}
+      <div className="flex min-h-0 flex-1">
+        {thumbsOpen && doc && <ThumbsRail doc={doc} onJump={goToPage} />}
+        <div ref={containerRef} onScroll={handleScroll} className="min-w-0 flex-1 overflow-auto p-3">
         {error && (
           <div className="m-4 rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
             Failed to load PDF: {error}
@@ -446,7 +512,95 @@ export function PdfPreview() {
               );
             })}
         </div>
+        </div>
+        {outlineOpen && <OutlineRail onJump={(f, l) => void jumpToSection(f, l)} />}
       </div>
+    </div>
+  );
+}
+
+/** V0.5 Reading Workspace — lazy page thumbnails; click jumps to the page. */
+function ThumbsRail({ doc, onJump }: { doc: pdfjsLib.PDFDocumentProxy; onJump: (n: number) => void }) {
+  const page = usePreviewStore((s) => s.page);
+  const railRef = useRef<HTMLDivElement>(null);
+  const refs = useRef<(HTMLCanvasElement | null)[]>([]);
+
+  useEffect(() => {
+    const root = railRef.current;
+    if (!root || !doc) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const idx = Number((e.target as HTMLElement).dataset.thumb ?? -1);
+          const canvas = refs.current[idx];
+          if (!canvas || canvas.dataset.done === '1') continue;
+          canvas.dataset.done = '1';
+          void doc
+            .getPage(idx + 1)
+            .then((p) => {
+              if (!canvas.isConnected) return;
+              const vp = p.getViewport({ scale: 100 / p.getViewport({ scale: 1 }).width });
+              canvas.width = Math.floor(vp.width);
+              canvas.height = Math.floor(vp.height);
+              return p.render({ canvasContext: canvas.getContext('2d')!, viewport: vp }).promise;
+            })
+            .catch(() => {});
+        }
+      },
+      { root, rootMargin: '200px' }
+    );
+    for (const el of Array.from(root.querySelectorAll('[data-thumb]'))) io.observe(el);
+    return () => io.disconnect();
+  }, [doc]);
+
+  return (
+    <div ref={railRef} className="w-[124px] shrink-0 overflow-y-auto border-r border-zinc-200 p-2 dark:border-zinc-800">
+      {Array.from({ length: doc.numPages }, (_, i) => (
+        <button
+          key={i}
+          data-thumb={i}
+          onClick={() => onJump(i + 1)}
+          title={`Page ${i + 1}`}
+          className={`mb-2 block w-full rounded border bg-white p-0.5 ${
+            page === i + 1 ? 'border-blue-500' : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700'
+          }`}
+        >
+          <canvas ref={(c) => { refs.current[i] = c; }} className="w-full" />
+          <div className="text-center text-[10px] text-zinc-400">{i + 1}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** V0.5 Reading Workspace — the paper's sections; click jumps via SyncTeX. */
+function OutlineRail({ onJump }: { onJump: (file: string, line: number) => void }) {
+  const index = useProjectIndexStore((s) => s.index);
+  const sections = useMemo(
+    () =>
+      [...(index?.sections ?? [])].sort((a, b) =>
+        a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file)
+      ),
+    [index]
+  );
+  return (
+    <div className="w-48 shrink-0 overflow-y-auto border-l border-zinc-200 p-2 dark:border-zinc-800">
+      <p className="mb-1 text-[10px] font-semibold tracking-wide text-zinc-400 uppercase">
+        Outline
+      </p>
+      {sections.length === 0 && <p className="text-xs text-zinc-400">No sections indexed.</p>}
+      {sections.map((s, i) => (
+        <button
+          key={`${s.file}:${s.line}:${i}`}
+          onClick={() => onJump(s.file, s.line)}
+          className="block w-full truncate rounded px-1 py-0.5 text-left text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          style={{ paddingLeft: `${4 + s.level * 10}px` }}
+          title={`Jump to page — ${s.file}:${s.line}`}
+        >
+          {s.title}
+        </button>
+      ))}
     </div>
   );
 }

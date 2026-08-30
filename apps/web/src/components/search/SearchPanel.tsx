@@ -179,6 +179,7 @@ export function SearchPanel() {
                 className="block w-full truncate px-1 py-0.5 text-left font-mono text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 <span className="mr-1 text-zinc-400">{m.line}</span>
+                {m.section && <span className="mr-1 text-zinc-400">{m.section} ·</span>}
                 {m.preview}
               </button>
             ))}

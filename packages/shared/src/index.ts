@@ -466,6 +466,29 @@ export interface CitationWorkspaceResponse {
   entries: CitationEntryView[];
 }
 
+/** V0.5-PLAN 4 — a user-defined term and the forms that must not appear. */
+export interface TerminologyTerm {
+  /** The form the paper should use. */
+  preferred: string;
+  /** Spellings that mean the same thing but are inconsistent with preferred. */
+  variants: string[];
+  acronym?: string;
+  /** Forms that must never appear at all. */
+  forbidden?: string[];
+}
+
+/** One rule-based terminology inconsistency found in the writing. */
+export interface TerminologyHit {
+  preferred: string;
+  matched: string;
+  /** True when the match is a forbidden form rather than a variant. */
+  forbidden: boolean;
+  file: string;
+  line: number;
+  column: number;
+  context: string;
+}
+
 /** Status is relative to the snapshot: what the working tree did since. */
 export interface SnapshotDiffEntry {
   path: string;
@@ -491,6 +514,8 @@ export interface SearchMatch {
   preview: string;
   /** Length of the matched text, so the UI can highlight it on jump. */
   length: number;
+  /** Nearest preceding heading in the same file (V0.5 Search → Context). */
+  section?: string;
 }
 
 export interface SearchResponse {
