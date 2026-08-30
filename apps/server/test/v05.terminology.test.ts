@@ -104,6 +104,21 @@ describe('terminology', () => {
     expect(hit?.line).toBe(2);
     await fs.rm(path.join(ws, 'extra.tex'), { force: true });
   });
+  it('caches repeated scans and invalidates when the glossary changes', async () => {
+    await put('/api/paper/terminology', {
+      terms: [{ preferred: 'X radar', variants: ['millimeter-wave radar'] }],
+    });
+    const first = await (await get('/api/paper/terminology/hits')).json();
+    const repeat = await (await get('/api/paper/terminology/hits')).json();
+    expect(repeat.hits).toEqual(first.hits); // unchanged state → identical cached result
+
+    await put('/api/paper/terminology', {
+      terms: [{ preferred: 'Y radar', variants: ['mmWave radar'] }],
+    });
+    const after = await (await get('/api/paper/terminology/hits')).json();
+    expect(after.hits.some((h) => h.preferred === 'Y radar')).toBe(true);
+    expect(after.hits.some((h) => h.preferred === 'X radar')).toBe(false);
+  });
 });
 
 describe('reading state', () => {

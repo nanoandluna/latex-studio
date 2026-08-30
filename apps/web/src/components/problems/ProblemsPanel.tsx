@@ -57,19 +57,26 @@ export function ProblemsPanel() {
     return () => { cancelled = true; };
   }, [writingChecksEnabled, index]);
 
-  // V0.5 terminology consistency hits (warning-tier, same toggle)
+  // V0.5 terminology consistency hits (warning-tier, same toggle). The scan
+  // runs over the whole project, so it is debounced: one request after the
+  // index stops moving, not one per keystroke burst.
   useEffect(() => {
     if (!writingChecksEnabled || !index) {
       setTermHits([]);
       return;
     }
     let cancelled = false;
-    import('../../api/client').then(({ api }) =>
-      api.terminologyHits().then((r) => {
-        if (!cancelled) setTermHits(r.hits);
-      }).catch(() => {})
-    );
-    return () => { cancelled = true; };
+    const t = setTimeout(() => {
+      import('../../api/client').then(({ api }) =>
+        api.terminologyHits().then((r) => {
+          if (!cancelled) setTermHits(r.hits);
+        }).catch(() => {})
+      );
+    }, 800);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [writingChecksEnabled, index]);
   const problems: (Problem & { source: 'build' | 'index' })[] = [
     ...buildProblems.map((p) => ({ ...p, source: 'build' as const })),

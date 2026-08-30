@@ -312,9 +312,10 @@ export function PdfPreview() {
         const saved = state[mainFile];
         if (cancelled || !saved || saved <= 1 || saved > doc.numPages) return;
         goToPage(saved);
-        // re-anchor once neighbouring pages have real heights
+        // re-anchor once neighbouring pages have real heights — but only if
+        // the reader has not already scrolled somewhere else in the meantime
         setTimeout(() => {
-          if (!cancelled) goToPage(saved);
+          if (!cancelled && usePreviewStore.getState().page === saved) goToPage(saved);
         }, 700);
       })
       .catch(() => {});

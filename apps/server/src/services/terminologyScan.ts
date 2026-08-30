@@ -1,6 +1,6 @@
 import { projectIndexService } from './projectIndexService.js';
 import { readTerms } from './terminologyStore.js';
-import type { TerminologyHit, TerminologyTerm } from '@latex-studio/shared';
+import type { ProjectIndex, TerminologyHit, TerminologyTerm } from '@latex-studio/shared';
 
 /**
  * V0.5-PLAN 4 — rule-based terminology consistency scan. No AI: a hit is a
@@ -55,6 +55,14 @@ export async function scanTerminology(): Promise<{
   const index = projectIndexService.getSnapshot();
   if (!index) return { hits: [], scannedFiles: 0, terms };
 
+  // The scan is O(files × patterns × lines) and Problems refetches it after
+  // every index tick — cache by (snapshot identity, glossary) so repeated
+  // requests over unchanged state cost nothing.
+  const termsJson = JSON.stringify(terms);
+  if (lastScan && lastScan.snapshot === index && lastScan.termsJson === termsJson) {
+    return lastScan.result;
+  }
+
   const texFiles = index.files.filter((f) => f.endsWith('.tex'));
   const hits: TerminologyHit[] = [];
   for (const rel of texFiles) {
@@ -81,5 +89,13 @@ export async function scanTerminology(): Promise<{
     }
   }
   hits.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file)));
-  return { hits, scannedFiles: texFiles.length, terms };
+  const result = { hits, scannedFiles: texFiles.length, terms };
+  lastScan = { snapshot: index, termsJson, result };
+  return result;
 }
+
+let lastScan: {
+  snapshot: ProjectIndex;
+  termsJson: string;
+  result: { hits: TerminologyHit[]; scannedFiles: number; terms: TerminologyTerm[] };
+} | null = null;
