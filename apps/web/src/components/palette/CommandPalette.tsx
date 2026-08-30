@@ -83,7 +83,15 @@ export function CommandPalette() {
         label: 'Show Statistics',
         run: () => {
           showPanel('navigator');
-          window.dispatchEvent(new CustomEvent('latex-studio:show-stats'));
+          ui.setNavigatorView('stats');
+        },
+      },
+      {
+        id: 'show-paper-overview',
+        label: 'Show Paper Overview',
+        run: () => {
+          showPanel('navigator');
+          ui.setNavigatorView('overview');
         },
       },
       {

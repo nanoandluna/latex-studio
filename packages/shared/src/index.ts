@@ -396,6 +396,34 @@ export interface StatisticsResponse {
   files: { path: string; stats: TextStats }[];
 }
 
+/** V0.5-PLAN 1 — one chapter row of the paper overview. */
+export interface PaperOverviewChapter {
+  title: string;
+  file: string;
+  line: number;
+  cjkCharacters: number;
+  estimatedWords: number;
+  citations: number;
+  figures: number;
+  tables: number;
+  equations: number;
+}
+
+/** V0.5-PLAN 1 — the "what state is this paper in?" dashboard payload. */
+export interface PaperOverview {
+  structure: { chapters: number; sections: number };
+  content: { cjkCharacters: number; latinWords: number; estimatedWords: number };
+  assets: { figures: number; tables: number; equations: number };
+  references: {
+    citations: number;
+    bibEntries: number;
+    undefinedCitations: number;
+    undefinedReferences: number;
+  };
+  diagnostics: { errors: number; warnings: number; infos: number };
+  chapters: PaperOverviewChapter[];
+}
+
 /** Status is relative to the snapshot: what the working tree did since. */
 export interface SnapshotDiffEntry {
   path: string;

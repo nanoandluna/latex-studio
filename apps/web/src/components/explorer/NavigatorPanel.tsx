@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { useEditorStore } from '../../stores/editorStore';
+import { useUiStore } from '../../stores/uiStore';
 import { StatisticsPanel } from '../statistics/StatisticsPanel';
+import { PaperOverviewPanel } from '../statistics/PaperOverviewPanel';
 
 type GroupKey =
   | 'sections'
@@ -36,16 +38,12 @@ interface Row {
 export function NavigatorPanel() {
   const index = useProjectIndexStore((s) => s.index);
   const openFileAtLine = useEditorStore((s) => s.openFileAtLine);
+  // The view lives in the ui store so palette commands can set it before this
+  // panel mounts — a dispatch-then-listen custom event would race the mount.
+  const view = useUiStore((s) => s.navigatorView);
+  const setView = useUiStore((s) => s.setNavigatorView);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [showStats, setShowStats] = useState(false);
-
-  // The command palette opens the statistics view through this event.
-  useEffect(() => {
-    const open = () => setShowStats(true);
-    window.addEventListener('latex-studio:show-stats', open);
-    return () => window.removeEventListener('latex-studio:show-stats', open);
-  }, []);
 
   const grouped = useMemo(() => {
     if (!index) return null;
@@ -188,15 +186,16 @@ export function NavigatorPanel() {
       <div className="flex items-center gap-1 border-b border-zinc-200 px-2 pb-1 dark:border-zinc-800">
         {(
           [
+            ['overview', 'Overview'],
             ['symbols', 'Symbols'],
             ['stats', 'Stats'],
           ] as const
         ).map(([key, text]) => (
           <button
             key={key}
-            onClick={() => setShowStats(key === 'stats')}
+            onClick={() => setView(key)}
             className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-              (key === 'stats') === showStats
+              view === key
                 ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
                 : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
@@ -206,9 +205,10 @@ export function NavigatorPanel() {
         ))}
       </div>
 
-      {showStats && <StatisticsPanel />}
+      {view === 'overview' && <PaperOverviewPanel />}
+      {view === 'stats' && <StatisticsPanel />}
 
-      {!showStats && GROUPS.map(({ key, label, icon }) => {
+      {view === 'symbols' && GROUPS.map(({ key, label, icon }) => {
         const items =
           key === 'diagnostics'
             ? (grouped.diagnostics.map((d) => ({

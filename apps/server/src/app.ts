@@ -13,6 +13,7 @@ import { registerSnapshotRoutes } from './routes/snapshots.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerStatisticsRoutes } from './routes/statistics.js';
 import { registerProjectRoutes } from './routes/project.js';
+import { registerPaperOverviewRoutes } from './routes/paperOverview.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerEnvRoutes } from './routes/env.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
@@ -59,6 +60,7 @@ export async function createApp() {
   await registerSearchRoutes(app);
   await registerStatisticsRoutes(app);
   await registerProjectRoutes(app);
+  await registerPaperOverviewRoutes(app);
 
   // V0.3.1 developer observability: Project Graph Inspector dump.
   app.get('/api/graph/debug', async () => {

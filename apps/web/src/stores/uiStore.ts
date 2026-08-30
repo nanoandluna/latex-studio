@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type BottomTab = 'problems' | 'output';
+type NavigatorView = 'symbols' | 'overview' | 'stats';
 
 /**
  * A read-only snapshot diff opened in the main editor area. Pure view state:
@@ -20,6 +21,8 @@ interface UiState {
   bottomPanelHeight: number;
   bottomPanelVisible: boolean;
   bottomTab: BottomTab;
+  /** Which Navigator sub-view is shown; commands set it before the panel mounts. */
+  navigatorView: NavigatorView;
   previewVisible: boolean;
   paletteOpen: boolean;
   workspaceModalOpen: boolean;
@@ -32,6 +35,7 @@ interface UiState {
   toggleExplorer: () => void;
   setBottomPanelHeight: (h: number) => void;
   setBottomTab: (t: BottomTab) => void;
+  setNavigatorView: (v: NavigatorView) => void;
   setPaletteOpen: (v: boolean) => void;
   setWorkspaceModalOpen: (v: boolean) => void;
   dismissEnvWarning: () => void;
@@ -50,6 +54,7 @@ export const useUiStore = create<UiState>()(
       bottomPanelHeight: 200,
       bottomPanelVisible: true,
       bottomTab: 'problems',
+      navigatorView: 'symbols',
       previewVisible: true,
       paletteOpen: false,
       workspaceModalOpen: false,
@@ -60,6 +65,7 @@ export const useUiStore = create<UiState>()(
       toggleExplorer: () => set((s) => ({ explorerVisible: !s.explorerVisible })),
       setBottomPanelHeight: (bottomPanelHeight) => set({ bottomPanelHeight }),
       setBottomTab: (bottomTab) => set({ bottomTab }),
+      setNavigatorView: (navigatorView) => set({ navigatorView }),
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
       setWorkspaceModalOpen: (workspaceModalOpen) => set({ workspaceModalOpen }),
       dismissEnvWarning: () => set({ envWarningDismissed: true }),

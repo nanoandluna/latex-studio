@@ -270,6 +270,10 @@ export const api = {
   // ---- V0.4: Statistics ----
   statistics: () => request<StatisticsResponse>('/api/statistics'),
 
+  // ---- V0.5: Paper Overview ----
+  paperOverview: () =>
+    request<import('@latex-studio/shared').PaperOverview>('/api/paper/overview'),
+
   // ---- V0.4: Project ZIP ----
   exportProjectUrl: () => '/api/project/export',
 
