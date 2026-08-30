@@ -18,27 +18,39 @@ export function parseBibEntries(content: string, file = ''): BibEntry[] {
   const entries: BibEntry[] = [];
   const seen = new Set<string>();
   // Strip comment lines starting with %
-  const cleaned = content
+  const withoutPercent = content
     .split('\n')
     .map((l) => (l.trimStart().startsWith('%') ? '' : l))
     .join('\n');
+  // Blank the bodies of @comment/@string/@preamble blocks (newlines kept, so
+  // entry line numbers survive): nothing inside them is a real entry. The
+  // entry regex cannot match these itself — they carry no "key," part.
+  const cleaned = blankInertBodies(withoutPercent);
 
   let m: RegExpExecArray | null;
   BIB_ENTRY_RE.lastIndex = 0;
   while ((m = BIB_ENTRY_RE.exec(cleaned)) !== null) {
     const type = m[1].toLowerCase();
-    if (type === 'comment' || type === 'string' || type === 'preamble') continue;
+    const bodyStart = m.index + m[0].length;
+    const bodyEnd = findEntryEnd(cleaned, bodyStart);
+    // @comment/@string/@preamble bodies are inert: nothing inside them (not
+    // even a well-formed @entry) is a real entry. Skipping to the body end
+    // also stops a literal "@type{key," inside a field from creating a
+    // phantom entry.
+    if (type === 'comment' || type === 'string' || type === 'preamble') {
+      BIB_ENTRY_RE.lastIndex = bodyEnd;
+      continue;
+    }
     const key = m[2];
     if (seen.has(key)) {
       // duplicate key: keep the first definition, but surface the conflict —
       // bibtex would pick one silently and the user would never know
       const first = entries.find((e) => e.key === key);
       if (first) first.duplicate = true;
+      BIB_ENTRY_RE.lastIndex = bodyEnd;
       continue;
     }
     seen.add(key);
-    const bodyStart = m.index + m[0].length;
-    const bodyEnd = findEntryEnd(cleaned, bodyStart);
     const body = cleaned.slice(bodyStart, bodyEnd);
     entries.push({
       key,
@@ -49,8 +61,33 @@ export function parseBibEntries(content: string, file = ''): BibEntry[] {
       title: extractField(body, 'title'),
       year: extractField(body, 'year'),
     });
+    BIB_ENTRY_RE.lastIndex = bodyEnd;
   }
   return entries;
+}
+
+/** Blank @comment/@string/@preamble block bodies with spaces (newlines kept). */
+function blankInertBodies(text: string): string {
+  const re = /@(comment|string|preamble)\s*(?=\{|\()/gi;
+  let out = text;
+  // scan on the ORIGINAL text; replacements are same-length spaces, so the
+  // indices of later matches stay valid
+  while ((re.exec(text)) !== null) {
+    const bodyStart = re.lastIndex;
+    const opener = text[bodyStart];
+    const closer = opener === '{' ? '}' : ')';
+    let depth = 1;
+    let i = bodyStart + 1;
+    for (; i < text.length; i++) {
+      if (text[i] === opener) depth++;
+      else if (text[i] === closer) {
+        depth--;
+        if (depth === 0) break;
+      }
+    }
+    out = out.slice(0, bodyStart + 1) + out.slice(bodyStart + 1, i).replace(/[^\n]/g, ' ') + out.slice(i);
+  }
+  return out;
 }
 
 /** Body of an entry runs until the brace closing the entry. The regex that
@@ -69,7 +106,8 @@ function findEntryEnd(text: string, start: number): number {
 }
 
 function extractField(body: string, field: string): string | undefined {
-  const m = body.match(new RegExp(`${field}\\s*=\\s*`, 'i'));
+  // (?<![a-zA-Z]) — "years = …" must not satisfy a lookup for "year"
+  const m = body.match(new RegExp(`(?<![a-zA-Z])${field}\\s*=\\s*`, 'i'));
   if (!m) return undefined;
   let i = m.index! + m[0].length;
   const open = body[i];

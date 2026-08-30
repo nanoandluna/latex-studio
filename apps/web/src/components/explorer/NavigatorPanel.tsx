@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useUiStore } from '../../stores/uiStore';
+import { useCitationWorkspaceStore } from '../../stores/citationWorkspaceStore';
 import { StatisticsPanel } from '../statistics/StatisticsPanel';
 import { PaperOverviewPanel } from '../statistics/PaperOverviewPanel';
 import { CitationWorkspacePanel } from '../citations/CitationWorkspacePanel';
@@ -33,13 +34,22 @@ interface Row {
   hint?: string;
   /** usage count badge */
   uses?: number;
-  /** problem marker (undefined / unused / missing) */
-  flag?: 'undefined' | 'unused';
+  /** problem marker (undefined / unused / duplicate / missing) */
+  flag?: 'undefined' | 'unused' | 'duplicate';
 }
 
 export function NavigatorPanel() {
   const index = useProjectIndexStore((s) => s.index);
   const openFileAtLine = useEditorStore((s) => s.openFileAtLine);
+  const cwData = useCitationWorkspaceStore((s) => s.data);
+  const cwLoading = useCitationWorkspaceStore((s) => s.loading);
+  const cwLoad = useCitationWorkspaceStore((s) => s.load);
+  // the citations group derives from the Citation Workspace model (single
+  // source for every consumer since the V0.5.1 contract audit)
+  useEffect(() => {
+    const s = useCitationWorkspaceStore.getState();
+    if (!s.data && !s.loading) void s.load();
+  }, []);
   // The view lives in the ui store so palette commands can set it before this
   // panel mounts — a dispatch-then-listen custom event would race the mount.
   const view = useUiStore((s) => s.navigatorView);
@@ -51,9 +61,6 @@ export function NavigatorPanel() {
     if (!index) return null;
     const refCount = new Map<string, number>();
     for (const r of index.references) refCount.set(r.key, (refCount.get(r.key) ?? 0) + 1);
-    const citeCount = new Map<string, number>();
-    for (const c of index.citations) citeCount.set(c.key, (citeCount.get(c.key) ?? 0) + 1);
-    const bibKeys = new Set(index.bibEntries.map((b) => b.key));
     const labelKeys = new Set(index.labels.map((l) => l.key));
 
     const sections = index.sections.map((s) => ({
@@ -83,16 +90,22 @@ export function NavigatorPanel() {
       hint: e.key ?? '',
       uses: e.key ? (refCount.get(e.key) ?? 0) : undefined,
     }));
-    const citations = dedupe(
-      index.citations.map((c) => ({
-        title: c.key,
-        file: c.file,
-        line: c.line,
-        hint: bibTitle(index, c.key),
-        uses: citeCount.get(c.key) ?? 0,
-        flag: bibKeys.has(c.key) ? undefined : ('undefined' as const),
-      }))
-    );
+    // derived from the Citation Workspace model (/api/paper/citations) — one
+    // row per key in reading order, undefined/unused last
+    const citations = (cwData?.entries ?? []).map((e) => ({
+      title: e.key,
+      file: e.firstUsage?.file ?? e.bibFile ?? '',
+      line: e.firstUsage?.line ?? e.bibLine ?? 1,
+      hint: [e.author, e.title, e.year].filter(Boolean).join(' · '),
+      uses: e.usageCount,
+      flag: e.undefinedKey
+        ? ('undefined' as const)
+        : e.duplicate
+          ? ('duplicate' as const)
+          : !e.used
+            ? ('unused' as const)
+            : undefined,
+    }));
     const labels = dedupe(
       index.labels.map((l) => ({
         title: l.key,
@@ -121,7 +134,7 @@ export function NavigatorPanel() {
     }));
 
     return { sections, figures, tables, equations, citations, labels, diagnostics, usages, labelKeys };
-  }, [index]);
+  }, [index, cwData]);
 
   if (!grouped) {
     return <div className="px-3 py-2 text-xs text-zinc-400">No index yet.</div>;
@@ -156,7 +169,9 @@ export function NavigatorPanel() {
                 className={`shrink-0 rounded px-1 text-[9px] ${
                   it.flag === 'undefined'
                     ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
-                    : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                    : it.flag === 'duplicate'
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                      : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
                 }`}
               >
                 {it.flag}
@@ -256,11 +271,3 @@ function dedupe<T extends { title: string; file: string; line: number }>(items: 
   });
 }
 
-type IndexShape = NonNullable<ReturnType<typeof useProjectIndexStore.getState>['index']>;
-
-function bibTitle(index: IndexShape, key: string): string {
-  const entry = index.bibEntries.find((b) => b.key === key);
-  if (!entry) return 'missing in .bib';
-  const bits = [entry.author?.split(' and ')[0], entry.year].filter(Boolean);
-  return [bits.join(', '), entry.title].filter(Boolean).join(' — ');
-}

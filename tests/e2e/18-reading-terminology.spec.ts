@@ -66,9 +66,17 @@ test.describe('21 · reading workspace & terminology', () => {
     await page.locator('[title="Outline — click a section to jump to its page"]').click();
     const introRow = page.locator('button[title^="Jump to page"]', { hasText: '绪论' });
     await expect(introRow).toBeVisible({ timeout: 15_000 });
-    await introRow.click();
-    await page.waitForTimeout(1500);
-    await expect(page.getByText(/Page \d+ \/ \d+/)).toBeVisible();
+
+    // jump to the LAST section (a later page), let the position save, then
+    // reload — the reader must resume where it stopped (V0.5.1 regression)
+    const rows = page.locator('button[title^="Jump to page"]');
+    await rows.last().click();
+    await page.waitForTimeout(2000); // save debounce is 800ms
+    const before = await page.getByText(/Page \d+ \/ \d+/).innerText();
+    await page.reload();
+    await page.locator('canvas').first().waitFor({ state: 'visible', timeout: 60_000 });
+    await page.waitForTimeout(2000); // resume + double-anchor settle
+    await expect(page.getByText(/Page \d+ \/ \d+/)).toHaveText(before, { timeout: 15_000 });
 
     // thumbnails rail renders page canvases
     await page.locator('[title="Page thumbnails"]').click();

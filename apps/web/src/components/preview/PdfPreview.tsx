@@ -303,34 +303,76 @@ export function PdfPreview() {
   );
 
   // ---- V0.5 Reading Workspace: remember where the reader stopped -----------
+  const renderPageDirect = useCallback(
+    async (pageNum: number) => {
+      // Render a page immediately, bypassing the virtualizer: unrendered
+      // pages have placeholder heights, so a resume scroll into unrendered
+      // territory would land wrong and never settle.
+      const canvas = canvasesRef.current[pageNum - 1];
+      if (!canvas || !doc) return;
+      try {
+        const p = await doc.getPage(pageNum);
+        const viewport = p.getViewport({
+          scale: effectiveScale * window.devicePixelRatio,
+          rotation,
+        });
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = `${Math.floor(viewport.width / window.devicePixelRatio)}px`;
+        canvas.style.height = `${Math.floor(viewport.height / window.devicePixelRatio)}px`;
+        const ctx = canvas.getContext('2d')!;
+        const task = p.render({ canvasContext: ctx, viewport });
+        activeTasksRef.current.add(task as unknown as { cancel(): void });
+        await task.promise.catch(() => {});
+        activeTasksRef.current.delete(task as unknown as { cancel(): void });
+      } catch {
+        /* destroyed */
+      }
+    },
+    [doc, effectiveScale, rotation]
+  );
+
+  const resumedKey = useRef<string | null>(null);
+  const resumeDoneFor = useRef<string | null>(null);
   useEffect(() => {
     if (!doc || !mainFile) return;
+    const key = `${mainFile}:${pdfUrl}`;
+    if (resumedKey.current === key) return; // zoom/rotate re-runs must not re-jump
     let cancelled = false;
     api
       .readingState()
-      .then((state) => {
+      .then(async (state) => {
+        resumeDoneFor.current = key; // probe done — saving may start
         const saved = state[mainFile];
         if (cancelled || !saved || saved <= 1 || saved > doc.numPages) return;
+        resumedKey.current = key;
+        await renderPageDirect(saved);
+        if (cancelled) return;
         goToPage(saved);
-        // re-anchor once neighbouring pages have real heights — but only if
-        // the reader has not already scrolled somewhere else in the meantime
+        // second anchor after neighbouring pages settle — only when the
+        // reader has not already moved somewhere else
         setTimeout(() => {
           if (!cancelled && usePreviewStore.getState().page === saved) goToPage(saved);
-        }, 700);
+        }, 500);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) resumeDoneFor.current = key;
+      });
     return () => {
       cancelled = true;
     };
-  }, [doc, mainFile, goToPage]);
+  }, [doc, mainFile, pdfUrl, goToPage, renderPageDirect]);
 
   useEffect(() => {
     if (!doc || !mainFile || page < 1) return;
+    // until the resume probe settles, a scroll-triggered page 1 must not
+    // overwrite the stored position before it is ever read
+    if (resumeDoneFor.current !== `${mainFile}:${pdfUrl}`) return;
     const t = setTimeout(() => {
       void api.saveReadingState(mainFile, page).catch(() => {});
     }, 800);
     return () => clearTimeout(t);
-  }, [page, doc, mainFile]);
+  }, [page, doc, mainFile, pdfUrl]);
 
   const jumpToSection = useCallback(
     async (file: string, line: number) => {

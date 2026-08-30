@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { projectIndexService } from '../services/projectIndexService.js';
 import { analyzeTextStatistics, type TextStatsResult } from '@latex-studio/latex-parser';
+import {
+  assembleFromIndex,
+  chapterLevelOf,
+  sectionRanges,
+  sliceText,
+} from '../services/chapterAssembly.js';
 import type { SectionEntry } from '@latex-studio/shared';
 
 const EMPTY_STATS: TextStatsResult = {
@@ -27,23 +33,6 @@ function addStats(a: TextStatsResult, b: TextStatsResult): TextStatsResult {
   };
 }
 
-/**
- * V0.4-PLAN 3.2 — attribute text to the section that actually contains it.
- *
- * Each section owns the half-open range [line, nextSectionAtSameOrShallowerLevel).
- * In other words a section INCLUDES its subsections, which is what makes a
- * chapter's count meaningful: stopping at the next section of any level would
- * hand a chapter's own prose to its first subsection and leave the chapter
- * itself looking nearly empty.
- *
- * Text before the first section (preamble, front matter) is deliberately not
- * attributed to any section — the counting model excludes the preamble — so
- * section totals sum to less than the project total and never double-count.
- */
-function sliceForRange(lines: string[], startLine: number, endLineExclusive: number): string {
-  return lines.slice(Math.max(0, startLine - 1), Math.max(0, endLineExclusive - 1)).join('\n');
-}
-
 interface SectionStat {
   title: string;
   level: number;
@@ -55,8 +44,11 @@ interface SectionStat {
 export async function registerStatisticsRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Paper statistics — three aggregation levels (project / chapter / section).
-   * Per-file content is read once and reused for every level; the section
-   * breakdown comes from line ranges in the Project Graph, not a second walk.
+   * Per-file content is read once and reused for every level. Since V0.5.1
+   * the section/chapter breakdown comes from the assembled document (include
+   * graph from mainFile, see chapterAssembly.ts) — chapters span \input'd
+   * files, and Paper Overview shares the exact same semantics. Files not
+   * reachable from mainFile fall back to per-file intervals.
    */
   app.get('/api/statistics', async () => {
     if (projectIndexService.needsRebuild()) await projectIndexService.refresh();
@@ -65,8 +57,6 @@ export async function registerStatisticsRoutes(app: FastifyInstance): Promise<vo
 
     const texFiles = index.files.filter((f) => f.endsWith('.tex'));
 
-    // Text comes from the indexer's content cache (buffer-aware, mtime-keyed),
-    // so a repeat call costs no disk I/O and no second walk.
     const contents = new Map<string, string>();
     const fileStats: { path: string; stats: TextStatsResult }[] = [];
     let project = { ...EMPTY_STATS };
@@ -80,54 +70,65 @@ export async function registerStatisticsRoutes(app: FastifyInstance): Promise<vo
       project = addStats(project, stats);
     }
 
-    // group sections per file so ranges never span file boundaries
-    const byFile = new Map<string, SectionEntry[]>();
-    for (const s of index.sections) {
-      if (!contents.has(s.file)) continue;
-      const list = byFile.get(s.file) ?? [];
-      list.push(s);
-      byFile.set(s.file, list);
-    }
+    let sections: SectionStat[];
+    let chapters: { title: string; file: string; line: number; stats: TextStatsResult }[];
 
-    const sections: SectionStat[] = [];
-    for (const [file, list] of byFile) {
-      const content = contents.get(file) ?? '';
-      const lines = content.split(/\r?\n/);
-      list.sort((a, b) => a.line - b.line);
-      for (let i = 0; i < list.length; i++) {
-        const start = list[i].line;
-        let end = lines.length + 1;
-        for (let j = i + 1; j < list.length; j++) {
-          if (list[j].level <= list[i].level) {
-            end = list[j].line;
-            break;
-          }
-        }
-        sections.push({
-          title: list[i].title,
-          level: list[i].level,
-          file,
-          line: start,
-          stats: analyzeTextStatistics(sliceForRange(lines, start, end)),
-        });
-      }
-    }
-    sections.sort((a, b) =>
-      a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file)
-    );
-
-    // Chapter level: real \chapter when the document has one, otherwise the
-    // shallowest section level present (the article/book degenerate case).
-    const levels = [...new Set(sections.map((s) => s.level))].sort((a, b) => a - b);
-    const chapterLevel = levels.includes(1) ? 1 : (levels[0] ?? 2);
-    const chapters = sections
-      .filter((s) => s.level === chapterLevel)
-      .map((s) => ({
-        title: s.title,
-        file: s.file,
-        line: s.line,
-        stats: s.stats,
+    const { assembly } = await assembleFromIndex(index);
+    if (assembly) {
+      const ranges = sectionRanges(assembly.sections, assembly.lines.length);
+      sections = ranges.map((r) => ({
+        title: r.section.title,
+        level: r.section.level,
+        file: r.section.file,
+        line: r.section.line,
+        stats: analyzeTextStatistics(sliceText(assembly.lines, r.start, r.end)),
       }));
+      const level = chapterLevelOf(assembly.sections);
+      chapters = sections
+        .filter((s) => s.level === level)
+        .map((s) => ({ title: s.title, file: s.file, line: s.line, stats: s.stats }));
+    } else {
+      // no mainFile → per-file intervals (legacy semantics)
+      const byFile = new Map<string, SectionEntry[]>();
+      for (const s of index.sections) {
+        if (!contents.has(s.file)) continue;
+        const list = byFile.get(s.file) ?? [];
+        list.push(s);
+        byFile.set(s.file, list);
+      }
+      sections = [];
+      for (const [file, list] of byFile) {
+        const lines = (contents.get(file) ?? '').split(/\r?\n/);
+        list.sort((a, b) => a.line - b.line);
+        for (let i = 0; i < list.length; i++) {
+          const start = list[i].line;
+          let end = lines.length + 1;
+          for (let j = i + 1; j < list.length; j++) {
+            if (list[j].level <= list[i].level) {
+              end = list[j].line;
+              break;
+            }
+          }
+          sections.push({
+            title: list[i].title,
+            level: list[i].level,
+            file,
+            line: start,
+            stats: analyzeTextStatistics(
+              lines.slice(Math.max(0, start - 1), Math.max(0, end - 1)).join('\n')
+            ),
+          });
+        }
+      }
+      sections.sort((a, b) =>
+        a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file)
+      );
+      const levels = [...new Set(sections.map((s) => s.level))].sort((a, b) => a - b);
+      const chapterLevel = levels.includes(1) ? 1 : (levels[0] ?? 2);
+      chapters = sections
+        .filter((s) => s.level === chapterLevel)
+        .map((s) => ({ title: s.title, file: s.file, line: s.line, stats: s.stats }));
+    }
 
     return {
       project: {

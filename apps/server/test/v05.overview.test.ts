@@ -24,6 +24,7 @@ beforeAll(async () => {
       '这是第一章。Some latin words here.',
       'See \\ref{fig:one} and \\cite{smith2025} and \\cite{ghostKey}.',
       '\\begin{figure}[h]\\caption{One}\\label{fig:one}\\end{figure}',
+      '\\input{chapters/part}',
       '\\chapter{Method}',
       '第二章内容。\\cite{smith2025}',
       '\\section{Details}',
@@ -31,6 +32,11 @@ beforeAll(async () => {
       '\\end{document}',
       '',
     ].join('\n')
+  );
+  await fs.mkdir(path.join(ws, 'chapters'), { recursive: true });
+  await fs.writeFile(
+    path.join(ws, 'chapters', 'part.tex'),
+    ['\\section{Part details}', '来自包含文件的内容。\\cite{doe2024}', ''].join('\n')
   );
   await fs.writeFile(
     path.join(ws, 'refs.bib'),
@@ -60,26 +66,28 @@ describe('paper overview', () => {
   });
 
   it('reports exact structure, content and asset counts', () => {
-    expect(overview.structure).toEqual({ chapters: 2, sections: 3 });
+    expect(overview.structure).toEqual({ chapters: 2, sections: 4 });
     expect(overview.assets).toEqual({ figures: 1, tables: 0, equations: 0 });
     expect(overview.content.cjkCharacters).toBeGreaterThan(0);
     expect(overview.content.latinWords).toBeGreaterThan(0);
   });
 
   it('counts references and flags the undefined ones by distinct key', () => {
-    expect(overview.references.citations).toBe(3); // ghostKey, smith2025, smith2025
-    expect(overview.references.bibEntries).toBe(1);
-    expect(overview.references.undefinedCitations).toBe(1); // ghostKey
+    expect(overview.references.citations).toBe(4); // smith×2, ghostKey, doe2024
+    expect(overview.references.bibEntries).toBe(1); // smith2025
+    expect(overview.references.undefinedCitations).toBe(2); // ghostKey + doe2024
     expect(overview.references.undefinedReferences).toBe(1); // no:such:label
   });
 
-  it('attributes citations and figures to the right chapters', () => {
+  it('attributes citations and figures to the right chapters — across \input', () => {
     expect(overview.chapters).toHaveLength(2);
     const [intro, method] = overview.chapters;
     expect(intro.title).toBe('Intro');
-    expect(intro.citations).toBe(2); // smith2025 + ghostKey
+    // smith2025 + ghostKey in main.tex AND doe2024 inside the \input'd file
+    expect(intro.citations).toBe(3);
     expect(intro.figures).toBe(1);
-    expect(intro.cjkCharacters).toBeGreaterThan(0);
+    // the included file's prose counts toward the chapter that pulls it in
+    expect(intro.cjkCharacters).toBeGreaterThanOrEqual(14);
     expect(method.title).toBe('Method');
     expect(method.citations).toBe(1); // smith2025 again, counted in its own chapter
     expect(method.figures).toBe(0);
