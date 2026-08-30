@@ -4,6 +4,7 @@ import { useEditorStore } from '../../stores/editorStore';
 import { useUiStore } from '../../stores/uiStore';
 import { StatisticsPanel } from '../statistics/StatisticsPanel';
 import { PaperOverviewPanel } from '../statistics/PaperOverviewPanel';
+import { CitationWorkspacePanel } from '../citations/CitationWorkspacePanel';
 
 type GroupKey =
   | 'sections'
@@ -187,6 +188,7 @@ export function NavigatorPanel() {
         {(
           [
             ['overview', 'Overview'],
+            ['citations', 'Citations'],
             ['symbols', 'Symbols'],
             ['stats', 'Stats'],
           ] as const
@@ -206,6 +208,7 @@ export function NavigatorPanel() {
       </div>
 
       {view === 'overview' && <PaperOverviewPanel />}
+      {view === 'citations' && <CitationWorkspacePanel />}
       {view === 'stats' && <StatisticsPanel />}
 
       {view === 'symbols' && GROUPS.map(({ key, label, icon }) => {

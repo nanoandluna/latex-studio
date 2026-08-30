@@ -18,10 +18,11 @@ test.describe('11 · project index', () => {
     await page.getByText('Method', { exact: true }).first().click();
     await expect(page.locator('.monaco-editor')).toBeVisible();
 
-    // Navigator tab lists groups
+    // Navigator tab lists groups (the view switcher also has a Citations
+    // button now, so pin the Symbols group by its full label)
     await page.getByRole('tab', { name: 'Navigator' }).click();
     await expect(page.getByText('Figures', { exact: true })).toBeVisible();
-    await expect(page.getByText('Citations', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '▾ 📚 Citations' })).toBeVisible();
   });
 
   test('index diagnostics surface undefined references in Problems', async ({ page }) => {

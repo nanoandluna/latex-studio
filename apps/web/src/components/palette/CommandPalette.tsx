@@ -95,6 +95,14 @@ export function CommandPalette() {
         },
       },
       {
+        id: 'show-citation-workspace',
+        label: 'Show Citation Workspace',
+        run: () => {
+          showPanel('navigator');
+          ui.setNavigatorView('citations');
+        },
+      },
+      {
         id: 'export-project',
         label: 'Export Project (ZIP)',
         run: () => {

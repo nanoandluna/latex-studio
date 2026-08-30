@@ -274,6 +274,10 @@ export const api = {
   paperOverview: () =>
     request<import('@latex-studio/shared').PaperOverview>('/api/paper/overview'),
 
+  // ---- V0.5: Citation Workspace ----
+  citationWorkspace: () =>
+    request<import('@latex-studio/shared').CitationWorkspaceResponse>('/api/paper/citations'),
+
   // ---- V0.4: Project ZIP ----
   exportProjectUrl: () => '/api/project/export',
 

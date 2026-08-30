@@ -29,7 +29,13 @@ export function parseBibEntries(content: string, file = ''): BibEntry[] {
     const type = m[1].toLowerCase();
     if (type === 'comment' || type === 'string' || type === 'preamble') continue;
     const key = m[2];
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      // duplicate key: keep the first definition, but surface the conflict —
+      // bibtex would pick one silently and the user would never know
+      const first = entries.find((e) => e.key === key);
+      if (first) first.duplicate = true;
+      continue;
+    }
     seen.add(key);
     const bodyStart = m.index + m[0].length;
     const bodyEnd = findEntryEnd(cleaned, bodyStart);

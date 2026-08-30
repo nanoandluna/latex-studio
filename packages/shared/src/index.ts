@@ -174,6 +174,8 @@ export interface BibEntry {
   author?: string;
   title?: string;
   year?: string;
+  /** Another entry in some .bib file defines the same key. */
+  duplicate?: boolean;
 }
 
 export interface FigureTableEntry {
@@ -422,6 +424,46 @@ export interface PaperOverview {
   };
   diagnostics: { errors: number; warnings: number; infos: number };
   chapters: PaperOverviewChapter[];
+}
+
+/** V0.5-PLAN 2 — one place a key is cited, with structural context. */
+export interface CitationUsage {
+  file: string;
+  line: number;
+  column: number;
+  chapter?: string;
+  section?: string;
+  /** The surrounding line, comments stripped, trimmed for display. */
+  context: string;
+}
+
+/** V0.5-PLAN 2 — one key seen through the whole project. */
+export interface CitationEntryView {
+  key: string;
+  used: boolean;
+  /** Cited somewhere but present in no .bib file. */
+  undefinedKey: boolean;
+  /** The same key is defined by more than one bib entry. */
+  duplicate: boolean;
+  usageCount: number;
+  author?: string;
+  title?: string;
+  year?: string;
+  bibFile?: string;
+  bibLine?: number;
+  firstUsage: CitationUsage | null;
+  usages: CitationUsage[];
+}
+
+export interface CitationWorkspaceResponse {
+  counts: {
+    all: number;
+    used: number;
+    unused: number;
+    undefined: number;
+    duplicate: number;
+  };
+  entries: CitationEntryView[];
 }
 
 /** Status is relative to the snapshot: what the working tree did since. */

@@ -10,6 +10,7 @@ import { useSnapshotStore } from './snapshotStore';
 import { useSearchStore } from './searchStore';
 import { useStatisticsStore } from './statisticsStore';
 import { usePaperOverviewStore } from './paperOverviewStore';
+import { useCitationWorkspaceStore } from './citationWorkspaceStore';
 import { useUiStore } from './uiStore';
 
 /** Reset every workspace-scoped store so nothing leaks across projects. */
@@ -21,6 +22,7 @@ function resetWorkspaceScopedState(): void {
   useSnapshotStore.getState().reset();
   useStatisticsStore.getState().reset();
   usePaperOverviewStore.getState().reset();
+  useCitationWorkspaceStore.getState().reset();
   useSearchStore.getState().clear();
   useUiStore.getState().closeDiffWorkspace();
 }

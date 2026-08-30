@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePaperOverviewStore } from '../../stores/paperOverviewStore';
 import { useEditorStore } from '../../stores/editorStore';
 
@@ -11,6 +11,8 @@ export function PaperOverviewPanel() {
   const { data, loading, error } = usePaperOverviewStore();
   const load = usePaperOverviewStore((s) => s.load);
   const openFileAtLine = useEditorStore((s) => s.openFileAtLine);
+  // chapter rows stay restrained by default: summary line, full breakdown on demand
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     void load();
@@ -73,20 +75,48 @@ export function PaperOverviewPanel() {
             Chapters
           </h3>
           <div className="space-y-1">
-            {data.chapters.map((c, i) => (
-              <button
-                key={`${c.file}:${c.line}:${i}`}
-                onClick={() => void openFileAtLine(c.file, c.line)}
-                className="block w-full rounded px-1 py-1 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                title={`${c.file}:${c.line}`}
-              >
-                <div className="truncate text-[13px] font-medium">{c.title}</div>
-                <div className="text-xs text-zinc-500">
-                  {c.cjkCharacters.toLocaleString()} CJK · {c.citations} cites · {c.figures} fig ·{' '}
-                  {c.tables} tab · {c.equations} eq
+            {data.chapters.map((c, i) => {
+              const expanded = expandedRows.has(`${c.file}:${c.line}`);
+              return (
+                <div key={`${c.file}:${c.line}:${i}`} className="rounded hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                  <button
+                    onClick={() =>
+                      setExpandedRows((prev) => {
+                        const next = new Set(prev);
+                        const k = `${c.file}:${c.line}`;
+                        if (next.has(k)) next.delete(k);
+                        else next.add(k);
+                        return next;
+                      })
+                    }
+                    className="block w-full px-1 py-1 text-left"
+                    title={`${c.file}:${c.line}`}
+                  >
+                    <div className="truncate text-[13px] font-medium">{c.title}</div>
+                    <div className="text-xs text-zinc-500">
+                      {c.cjkCharacters.toLocaleString()} CJK · {c.citations} cites
+                      {c.figures > 0 ? ` · ${c.figures} fig` : ''}
+                    </div>
+                  </button>
+                  {/* the full breakdown stays one click away, not on the page */}
+                  {expanded && (
+                    <div className="grid grid-cols-2 gap-x-3 px-2 pb-1.5">
+                      <Metric label="Figures" value={c.figures} />
+                      <Metric label="Tables" value={c.tables} />
+                      <Metric label="Equations" value={c.equations} />
+                      <Metric label="Citations" value={c.citations} />
+                      <Metric label="Latin words" value={c.estimatedWords} />
+                      <button
+                        onClick={() => void openFileAtLine(c.file, c.line)}
+                        className="text-left text-xs text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Open in editor →
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
