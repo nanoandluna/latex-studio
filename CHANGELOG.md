@@ -4,6 +4,46 @@ All notable changes to LaTeX Studio. Versions follow semver; every release gate
 (`pnpm release:check`) runs the full unit + integration + security + real-LaTeX
 + E2E suite before a version is tagged.
 
+## 0.5.1 — Research Workflow Hardening
+
+Focus: the V0.5 research modules behave correctly on real projects — chapters
+that span files, .bib files that are messier than the spec, and a reading
+position that survives a reload. No new modules.
+
+### Chapter attribution
+- Chapters now come from the assembled document: the include graph is walked
+  from the main file, so prose pulled in through `\input` counts toward its
+  chapter in Paper Overview **and** Statistics. Both share one
+  `chapterAssembly` module. Files outside the include graph keep per-file
+  intervals and are listed after the graph, in reading order instead of
+  alphabetically.
+
+### Bibliography parsing
+- `@comment` / `@string` / `@preamble` block bodies are blanked before entries
+  are extracted — nested entries and `@`-looking text inside a body no longer
+  create phantom keys.
+- Field matching requires a word start, so `years =` no longer satisfies
+  `year`.
+
+### Reading position
+- The resume probe gates position saving: the scroll-triggered page-1 write can
+  no longer clobber the stored page before it is read, and the resume renders
+  its target page directly instead of scrolling through unrendered placeholder
+  heights.
+- The re-anchor no longer yanks the reader back when they have already scrolled
+  elsewhere inside its 700 ms window.
+- Regression test: build → jump → reload lands on the same page.
+
+### Performance
+- The terminology consistency scan is cached by (snapshot identity, glossary
+  JSON) and invalidated on any refresh or glossary change, so Problems no
+  longer rescans the whole project on every index tick; its fetch is debounced
+  800 ms.
+
+### Navigator
+- The citations group derives from `/api/paper/citations` — one model for the
+  panel and the Citation Workspace — with duplicate and unused badges.
+
 ## 0.5.0 — Research Writing Workspace
 
 Focus: the paper becomes a first-class object. Four modules, all derived from

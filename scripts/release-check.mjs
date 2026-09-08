@@ -36,7 +36,8 @@ const step = (name, ok) => {
   results.push([name, ok]);
 };
 
-step('Doctor', run('Doctor', 'pnpm', ['doctor']));
+// `pnpm doctor` resolves to pnpm's builtin doctor, not the project script.
+step('Doctor', run('Doctor', 'pnpm', ['run', 'doctor']));
 step('Typecheck', run('Typecheck', 'pnpm', ['-r', 'typecheck']));
 step('Unit/Integration', run('Tests (unit/integration)', 'pnpm', ['-r', 'test']));
 step(
@@ -48,25 +49,8 @@ step(
     { RUN_LATEX_TESTS: '1' }
   )
 );
-step(
-  'Real E2E',
-  run(
-    'Real E2E',
-    'node',
-    [
-      'scripts/run-with-env.mjs',
-      'E2E_HAS_LATEX=1',
-      '--',
-      'pnpm',
-      'exec',
-      'playwright',
-      'test',
-      '-c',
-      'tests/playwright.config.ts',
-    ],
-    { E2E_HAS_LATEX: '1' }
-  )
-);
+// test:e2e:latex builds web + server first, otherwise Playwright serves a stale dist.
+step('Real E2E', run('Real E2E', 'pnpm', ['run', 'test:e2e:latex'], { E2E_HAS_LATEX: '1' }));
 step('Web Build', run('Web Build', 'pnpm', ['--filter', '@latex-studio/web', 'build']));
 step('Server Build', run('Server Build', 'pnpm', ['--filter', '@latex-studio/server', 'build']));
 
