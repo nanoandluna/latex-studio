@@ -17,6 +17,7 @@ V1.0 completes the everyday path from writing and bibliography updates to PDF re
 - Citation search by key, title, author, year and DOI; cursor insertion, copy and safe DOI/web links.
 - Zotero / Better BibTeX exports refresh in the UI when the bibliography changes. No Zotero account or database access is required.
 - Citation usages follow assembled include order and inherit chapters across `\input` files.
+- PDF pages reserve their full dimensions before rendering; reading-position recovery survives fit-width changes without overwriting the saved page.
 - A welcome screen explains the core workflow and checks the local TeX environment.
 - Nested `\include` outputs work with TeX Live as well as MiKTeX. Direct compilation performs both post-bibliography passes; bibliography failures and cancellation are preserved in the build result and tool log.
 

@@ -12,6 +12,7 @@ All notable changes to LaTeX Studio. Versions follow semver; every release gate
 - Snapshot manifests and source SHA-256 hashes are validated before restore; deleted files/directories recover correctly, partial selection is validated, and removals follow successful publication.
 - Citation metadata search, cursor insertion, copy and safe DOI/URL links; cross-file chapter context and include-order usages. Bibliography changes refresh through a lightweight graph-revision probe.
 - TeX Live-compatible nested include auxiliary directories, complete post-bibliography passes, and explicit bibliography failure/cancellation with tool output.
+- Stable PDF page geometry and reading-position recovery across asynchronous rendering and fit-width changes.
 - Welcome/environment setup screen, portable project creation paths, offline Monaco workers, lazy editor/PDF loading and removal of unused language bundles, obsolete welcome/scanner code and duplicate prose.
 - Patched Fastify/static/CORS and Vitest dependencies, targeted transitive patches and a clean dependency audit.
 - Cross-platform CI, strict real-toolchain release checks, production security smoke, new regression coverage, prebuilt ZIP/checksums, launchers, Chinese quick-start and upgrade notes.

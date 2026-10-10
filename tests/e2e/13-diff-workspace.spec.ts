@@ -25,6 +25,7 @@ test.describe('16 · diff workspace (main editor area)', () => {
     // snapshot the pristine state, then modify main.tex
     await page.getByRole('tab', { name: 'History' }).click();
     await page.getByRole('button', { name: 'Snapshot', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Snapshot', exact: true })).toBeEnabled();
     await page.getByText('Manual', { exact: true }).first().click();
     await expect(page.getByText('No differences')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Restore this snapshot' })).toBeDisabled();
@@ -74,6 +75,7 @@ test.describe('16 · diff workspace (main editor area)', () => {
     // snapshot BEFORE both edits, so the diff really shows two modified files
     await page.getByRole('tab', { name: 'History' }).click();
     await page.getByRole('button', { name: 'Snapshot', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Snapshot', exact: true })).toBeEnabled();
     await page.getByRole('tab', { name: 'Explorer' }).click();
     await openFile(page, 'main.tex');
     await editAndSave(page, 'changed-main-marker');
@@ -112,6 +114,7 @@ test.describe('16 · diff workspace (main editor area)', () => {
     await openFile(page, 'main.tex');
     await page.getByRole('tab', { name: 'History' }).click();
     await page.getByRole('button', { name: 'Snapshot', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Snapshot', exact: true })).toBeEnabled();
     await page.getByRole('tab', { name: 'Explorer' }).click();
     await openFile(page, 'intro.tex');
     await editAndSave(page, 'layout-marker');

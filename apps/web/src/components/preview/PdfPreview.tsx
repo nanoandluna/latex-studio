@@ -25,6 +25,7 @@ export function PdfPreview() {
   const setPage = usePreviewStore((s) => s.setPage);
   const setPageCount = usePreviewStore((s) => s.setPageCount);
   const mainFile = useWorkspaceStore((s) => s.mainFile);
+  const workspacePath = useWorkspaceStore((s) => s.path);
   const index = useProjectIndexStore((s) => s.index);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -34,6 +35,7 @@ export function PdfPreview() {
   const activeTasksRef = useRef<Set<{ cancel(): void }>>(new Set());
 
   const [doc, setDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[]>([]);
   const [fitScale, setFitScale] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [renderVersion, setRenderVersion] = useState(0);
@@ -72,6 +74,8 @@ export function PdfPreview() {
     }
     let cancelled = false;
     let loaded: pdfjsLib.PDFDocumentProxy | null = null;
+    setDoc(null);
+    setPageSizes([]);
     setError(null);
     setMatchCountPerPage({});
     setHighlights({});
@@ -87,7 +91,15 @@ export function PdfPreview() {
           return r.arrayBuffer();
         });
         loaded = await pdfjsLib.getDocument({ data: buf }).promise;
+        // Reserve each page's geometry before virtual rendering. Canvas default
+        // sizes otherwise shift earlier pages under a restored scroll position.
+        const sizes = await Promise.all(Array.from({ length: loaded.numPages }, async (_, index) => {
+          const p = await loaded!.getPage(index + 1);
+          const viewport = p.getViewport({ scale: 1, rotation: 0 });
+          return { width: viewport.width, height: viewport.height };
+        }));
         if (!cancelled) {
+          setPageSizes(sizes);
           setDoc(loaded);
           setPageCount(loaded.numPages);
           // V0.3 SyncTeX diagnostics (non-fatal indicator)
@@ -177,6 +189,7 @@ export function PdfPreview() {
 
       try {
         const p = await doc.getPage(pageIndex + 1);
+        if (canvas.dataset.rendered !== versionKey) return;
         const viewport = p.getViewport({
           scale: effectiveScale * window.devicePixelRatio,
           rotation,
@@ -333,22 +346,27 @@ export function PdfPreview() {
   );
 
   const resumedKey = useRef<string | null>(null);
-  const resumeDoneFor = useRef<string | null>(null);
+  const [readingReadyKey, setReadingReadyKey] = useState<string | null>(null);
+  const readingKey = `${workspacePath}:${mainFile}:${pdfUrl}`;
   useEffect(() => {
-    if (!doc || !mainFile) return;
-    const key = `${mainFile}:${pdfUrl}`;
+    if (!doc || !mainFile || !workspacePath) return;
+    const key = readingKey;
     if (resumedKey.current === key) return; // zoom/rotate re-runs must not re-jump
     let cancelled = false;
     api
       .readingState()
       .then(async (state) => {
-        resumeDoneFor.current = key; // probe done — saving may start
-        const saved = state[mainFile];
-        if (cancelled || !saved || saved <= 1 || saved > doc.numPages) return;
-        resumedKey.current = key;
-        await renderPageDirect(saved);
         if (cancelled) return;
-        goToPage(saved);
+        const saved = state[mainFile];
+        if (saved > 1 && saved <= doc.numPages) {
+          await renderPageDirect(saved);
+          if (cancelled) return;
+          goToPage(saved);
+        }
+        // Commit only after the asynchronous render/scroll survives cleanup.
+        // A fit-scale change may cancel it; the next effect must retry it.
+        resumedKey.current = key;
+        setReadingReadyKey(key);
         // second anchor after neighbouring pages settle — only when the
         // reader has not already moved somewhere else
         setTimeout(() => {
@@ -356,23 +374,23 @@ export function PdfPreview() {
         }, 500);
       })
       .catch(() => {
-        if (!cancelled) resumeDoneFor.current = key;
+        if (!cancelled) setReadingReadyKey(key);
       });
     return () => {
       cancelled = true;
     };
-  }, [doc, mainFile, pdfUrl, goToPage, renderPageDirect]);
+  }, [doc, mainFile, workspacePath, readingKey, goToPage, renderPageDirect]);
 
   useEffect(() => {
     if (!doc || !mainFile || page < 1) return;
     // until the resume probe settles, a scroll-triggered page 1 must not
     // overwrite the stored position before it is ever read
-    if (resumeDoneFor.current !== `${mainFile}:${pdfUrl}`) return;
+    if (readingReadyKey !== readingKey) return;
     const t = setTimeout(() => {
       void api.saveReadingState(mainFile, page).catch(() => {});
     }, 800);
     return () => clearTimeout(t);
-  }, [page, doc, mainFile, pdfUrl]);
+  }, [page, doc, mainFile, readingReadyKey, readingKey]);
 
   const jumpToSection = useCallback(
     async (file: string, line: number) => {
@@ -513,7 +531,7 @@ export function PdfPreview() {
       {/* Pages, flanked by the optional thumbnail and outline rails */}
       <div className="flex min-h-0 flex-1">
         {thumbsOpen && doc && <ThumbsRail doc={doc} onJump={goToPage} />}
-        <div ref={containerRef} onScroll={handleScroll} className="min-w-0 flex-1 overflow-auto p-3">
+        <div ref={containerRef} onScroll={handleScroll} className="relative min-w-0 flex-1 overflow-auto p-3">
         {error && (
           <div className="m-4 rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
             Failed to load PDF: {error}
@@ -532,8 +550,13 @@ export function PdfPreview() {
                     pageRefs.current[i] = el;
                   }}
                   className="relative bg-white shadow-md"
+                  style={pageSizes[i] ? {
+                    width: Math.floor((rotation % 180 ? pageSizes[i].height : pageSizes[i].width) * effectiveScale),
+                    height: Math.floor((rotation % 180 ? pageSizes[i].width : pageSizes[i].height) * effectiveScale),
+                  } : undefined}
                 >
                   <canvas
+                    className="block"
                     onClick={(ev) => void handleCanvasClick(ev)}
                     title="Ctrl+Click for SyncTeX inverse search"
                     ref={(c) => {
