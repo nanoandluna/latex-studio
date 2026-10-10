@@ -4,6 +4,19 @@ All notable changes to LaTeX Studio. Versions follow semver; every release gate
 (`pnpm release:check`) runs the full unit + integration + security + real-LaTeX
 + E2E suite before a version is tagged.
 
+## 1.0.0 — Reliable Research Writing (2026-10-10)
+
+- Project-scoped browser session and unsaved-draft recovery, with unload protection and storage-error feedback.
+- Serialized saves mark the transmitted bytes saved, preserving typing that happens during a pending request. Build saves all dirty tabs first.
+- Atomic server writes, optimistic disk baselines, a conflict diff and explicit resolution. Real-path checks cover text reads and all file mutations; root deletion and destination-overwriting renames are rejected.
+- Snapshot manifests and source SHA-256 hashes are validated before restore; deleted files/directories recover correctly, partial selection is validated, and removals follow successful publication.
+- Citation metadata search, cursor insertion, copy and safe DOI/URL links; cross-file chapter context and include-order usages. Bibliography changes refresh through a lightweight graph-revision probe.
+- Welcome/environment setup screen, portable project creation paths, offline Monaco workers, lazy editor/PDF loading and removal of unused language bundles, obsolete welcome/scanner code and duplicate prose.
+- Patched Fastify/static/CORS and Vitest dependencies, targeted transitive patches and a clean dependency audit.
+- Cross-platform CI, strict real-toolchain release checks, production security smoke, new regression coverage, prebuilt ZIP/checksums, launchers and Chinese quick-start/upgrade notes.
+
+See [release notes](docs/RELEASE-v1.0.0.md) and [upgrade guide](docs/UPGRADE.md).
+
 ## 0.5.1 — Research Workflow Hardening
 
 Focus: the V0.5 research modules behave correctly on real projects — chapters
@@ -95,9 +108,6 @@ consistent release. No new research features by design.
   a first mount used to fall back to a light editor in dark mode until the
   History panel had been opened.
 - A concurrent double-click can no longer open duplicate editor tabs.
-
-Focus: comfort for long writing sessions, a usable diff, honest status, and a
-consistent release. No new research features by design.
 
 ### Diff
 - Snapshot diffs now open as a read-only tab in the **main editor area**

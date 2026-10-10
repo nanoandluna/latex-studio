@@ -60,6 +60,8 @@ export function parseBibEntries(content: string, file = ''): BibEntry[] {
       author: extractField(body, 'author'),
       title: extractField(body, 'title'),
       year: extractField(body, 'year'),
+      doi: extractField(body, 'doi'),
+      url: extractField(body, 'url'),
     });
     BIB_ENTRY_RE.lastIndex = bodyEnd;
   }

@@ -174,6 +174,8 @@ export interface BibEntry {
   author?: string;
   title?: string;
   year?: string;
+  doi?: string;
+  url?: string;
   /** Another entry in some .bib file defines the same key. */
   duplicate?: boolean;
 }
@@ -449,6 +451,8 @@ export interface CitationEntryView {
   author?: string;
   title?: string;
   year?: string;
+  doi?: string;
+  url?: string;
   bibFile?: string;
   bibLine?: number;
   firstUsage: CitationUsage | null;

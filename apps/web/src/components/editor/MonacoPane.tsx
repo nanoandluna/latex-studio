@@ -1,6 +1,6 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
-import * as monacoNs from 'monaco-editor';
+import * as monacoNs from 'monaco-editor/esm/vs/editor/editor.api';
 import { loader } from '@monaco-editor/react';
 import { api } from '../../api/client';
 import { useEditorStore } from '../../stores/editorStore';
@@ -29,6 +29,20 @@ export function MonacoPane() {
   const dark =
     theme === 'dark' ||
     (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  useEffect(() => {
+    const insert = (event: Event) => {
+      const { path, key } = (event as CustomEvent<{ path: string; key: string }>).detail;
+      const editor = editorRef.current;
+      const selection = editor?.getSelection();
+      if (!editor || !selection || path !== activePath || /[\\{}]/.test(key)) return;
+      editor.executeEdits('insert-citation', [{ range: selection, text: `\\cite{${key}}`, forceMoveMarkers: true }]);
+      editor.pushUndoStop();
+      editor.focus();
+    };
+    window.addEventListener('latex-studio:insert-citation', insert);
+    return () => window.removeEventListener('latex-studio:insert-citation', insert);
+  }, [activePath]);
 
   useEffect(() => {
     return () => {

@@ -1,14 +1,22 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FileNode } from '@latex-studio/shared';
-import { safeResolve, isDirectory, isTextFile, clearRealpathCache } from '../utils/paths.js';
+import { safeResolve, safeRealpathInside, safeRealpathForWrite, isDirectory, isTextFile, clearRealpathCache } from '../utils/paths.js';
 import { ApiError } from '../errors.js';
+import { atomicWrite } from '../utils/atomicWrite.js';
 
 const IGNORED_DIRS = new Set(['.git', '.build', 'node_modules', '__pycache__']);
 const IGNORED_FILES = new Set(['.DS_Store', 'Thumbs.db']);
 
 export class WorkspaceService {
   private root: string | null = null;
+  private writes = new Map<string, Promise<void>>();
+
+  private entryPath(root: string, rel: string): string {
+    const abs = safeResolve(root, rel);
+    if (abs === path.resolve(root)) throw new ApiError('INVALID_ARGUMENT', 'The workspace root is not a file entry');
+    return abs;
+  }
 
   get workspacePath(): string | null {
     return this.root;
@@ -80,24 +88,45 @@ export class WorkspaceService {
   async readFile(relPath: string): Promise<string> {
     const root = this.requireWorkspace();
     const abs = safeResolve(root, relPath);
+    await safeRealpathInside(root, abs);
     return fs.readFile(abs, 'utf8');
   }
 
-  async saveFile(relPath: string, content: string): Promise<void> {
+  async saveFile(relPath: string, content: string, expectedContent?: string | null, workspacePath?: string): Promise<void> {
     const root = this.requireWorkspace();
-    const abs = safeResolve(root, relPath);
+    if (workspacePath !== undefined && workspacePath !== root) {
+      throw new ApiError('CONFLICT', 'The workspace changed. Reopen the file before saving.');
+    }
+    const abs = this.entryPath(root, relPath);
     // Same rule as createFile: refuse to write text content into
     // binary-extension files.
     if (!isTextFile(relPath) && content.length > 0) {
       throw new ApiError('INVALID_FILE', `Refusing to write text content into binary-looking file: ${relPath}`, 400);
     }
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, content, 'utf8');
+    const previous = this.writes.get(abs) ?? Promise.resolve();
+    const write = previous.catch(() => {}).then(async () => {
+      await safeRealpathForWrite(root, abs);
+      if (expectedContent !== undefined) {
+        const current = await fs.readFile(abs, 'utf8').catch((err: NodeJS.ErrnoException) => {
+          if (err.code === 'ENOENT') return null;
+          throw err;
+        });
+        if (current !== expectedContent) {
+          throw new ApiError('CONFLICT', 'This file changed on disk. Your edits are kept. Compare with disk before saving again.');
+        }
+      }
+      await atomicWrite(root, abs, content);
+    });
+    this.writes.set(abs, write);
+    try { await write; } finally {
+      if (this.writes.get(abs) === write) this.writes.delete(abs);
+    }
   }
 
   async createFile(relPath: string, content = ''): Promise<void> {
     const root = this.requireWorkspace();
-    const abs = safeResolve(root, relPath);
+    const abs = this.entryPath(root, relPath);
+    await safeRealpathForWrite(root, abs);
     if (!isTextFile(relPath)) {
       // allow creating binary-ish files as empty; refuse non-empty content
       if (content) {
@@ -105,6 +134,7 @@ export class WorkspaceService {
       }
     }
     await fs.mkdir(path.dirname(abs), { recursive: true });
+    await safeRealpathForWrite(root, abs);
     await fs.writeFile(abs, content, { flag: 'wx' }).catch((e: NodeJS.ErrnoException) => {
       if (e.code === 'EEXIST') {
         throw new ApiError('CONFLICT', `File already exists: ${relPath}`);
@@ -115,7 +145,8 @@ export class WorkspaceService {
 
   async createDirectory(relPath: string): Promise<void> {
     const root = this.requireWorkspace();
-    const abs = safeResolve(root, relPath);
+    const abs = this.entryPath(root, relPath);
+    await safeRealpathForWrite(root, abs);
     await fs.mkdir(abs, { recursive: false }).catch((e: NodeJS.ErrnoException) => {
       if (e.code === 'EEXIST') {
         throw new ApiError('CONFLICT', `Directory already exists: ${relPath}`);
@@ -129,14 +160,22 @@ export class WorkspaceService {
     if (!relPath || relPath === '.' || relPath === '/') {
       throw new ApiError('INVALID_ARGUMENT', 'Refusing to delete the workspace root');
     }
-    const abs = safeResolve(root, relPath);
+    const abs = this.entryPath(root, relPath);
+    await safeRealpathInside(root, abs);
     await fs.rm(abs, { recursive: true, force: false });
   }
 
   async renameEntry(fromRel: string, toRel: string): Promise<void> {
     const root = this.requireWorkspace();
-    const fromAbs = safeResolve(root, fromRel);
-    const toAbs = safeResolve(root, toRel);
+    const fromAbs = this.entryPath(root, fromRel);
+    const toAbs = this.entryPath(root, toRel);
+    await safeRealpathInside(root, fromAbs);
+    await safeRealpathForWrite(root, toAbs);
+    const exists = await fs.lstat(toAbs).then(() => true).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') return false;
+      throw err;
+    });
+    if (exists) throw new ApiError('CONFLICT', `Target already exists: ${toRel}`);
     await fs.mkdir(path.dirname(toAbs), { recursive: true });
     await fs.rename(fromAbs, toAbs).catch((e: NodeJS.ErrnoException) => {
       if (e.code === 'EEXIST' || e.code === 'EPERM') {
@@ -152,6 +191,7 @@ export class WorkspaceService {
     const candidates = ['main.tex'];
     for (const c of candidates) {
       try {
+        await safeRealpathInside(root, path.join(root, c));
         await fs.access(path.join(root, c));
         return c;
       } catch {
@@ -191,29 +231,6 @@ export class WorkspaceService {
     return found[0]?.file ?? null;
   }
 
-  private async forEachFile(
-    absDir: string,
-    relDir: string,
-    fn: (rel: string, abs: string) => Promise<void>
-  ): Promise<void> {
-    let entries;
-    try {
-      entries = await fs.readdir(absDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (IGNORED_DIRS.has(e.name)) continue;
-      if (e.name.startsWith('.') && e.name !== '.gitignore') continue;
-      const rel = relDir ? `${relDir}/${e.name}` : e.name;
-      const abs = path.join(absDir, e.name);
-      if (e.isDirectory()) {
-        await this.forEachFile(abs, rel, fn);
-      } else if (e.isFile()) {
-        await fn(rel, abs);
-      }
-    }
-  }
 }
 
 export const workspaceService = new WorkspaceService();

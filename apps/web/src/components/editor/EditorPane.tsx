@@ -3,6 +3,8 @@ import { useUiStore } from '../../stores/uiStore';
 import { MonacoPane } from './MonacoPane';
 import { ImageViewer } from './ImageViewer';
 import { DiffWorkspace } from './DiffWorkspace';
+import { useState } from 'react';
+import { DiskConflictDialog } from './DiskConflictDialog';
 
 const PREVIEWABLE = /\.(png|jpe?g|gif|svg|pdf)$/i;
 
@@ -19,6 +21,11 @@ export function EditorPane() {
   const setActive = useEditorStore((s) => s.setActive);
   const closeTab = useEditorStore((s) => s.closeTab);
   const isDirty = useEditorStore((s) => s.isDirty);
+  const saveError = useEditorStore((s) => s.lastSaveError);
+  const recoveryNotice = useEditorStore((s) => s.recoveryNotice);
+  const recoveryError = useEditorStore((s) => s.recoveryError);
+  const conflictPath = useEditorStore((s) => s.conflictPath);
+  const [reviewPath, setReviewPath] = useState<string | null>(null);
   const diffSession = useUiStore((s) => s.diffSession);
   const diffVisible = useUiStore((s) => s.diffVisible);
   const showDiff = useUiStore((s) => s.showDiff);
@@ -30,6 +37,12 @@ export function EditorPane() {
 
   return (
     <div className="flex h-full min-w-0 flex-col">
+      {(saveError || recoveryError || recoveryNotice) && <div role="status" className="flex shrink-0 items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <span className="flex-1">{saveError ?? recoveryError ?? recoveryNotice}</span>
+        {conflictPath && <button className="shrink-0 underline" onClick={() => setReviewPath(conflictPath)}>Review disk changes</button>}
+        {!saveError && !recoveryError && <button aria-label="Dismiss recovery notice" onClick={() => useEditorStore.setState({ recoveryNotice: null })}>×</button>}
+      </div>}
+      {reviewPath && <DiskConflictDialog key={reviewPath} path={reviewPath} onClose={() => setReviewPath(null)} />}
       {(tabs.length > 0 || diffSession) && (
         <div data-testid="tab-strip" className="flex h-9 shrink-0 items-stretch overflow-x-auto border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-[#1c1c1f]">
           {tabs.map((t) => {
@@ -66,7 +79,10 @@ export function EditorPane() {
                         `${name} has unsaved changes.\n\nOK = save and close, Cancel = keep the tab open.`
                       );
                       if (save) {
-                        void useEditorStore.getState().saveFile(t.path).then(() => closeTab(t.path));
+                        void useEditorStore.getState().saveFile(t.path).then(() => {
+                          const current = useEditorStore.getState().tabs.find((x) => x.path === t.path);
+                          if (current && !isDirty(current)) closeTab(t.path);
+                        }).catch(() => {});
                         return;
                       }
                       if (!window.confirm(`Discard changes to ${name}?`)) return;

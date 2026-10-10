@@ -23,6 +23,8 @@ function envelope(index: import('@latex-studio/shared').ProjectIndex) {
 }
 
 export async function registerIndexRoutes(app: FastifyInstance): Promise<void> {
+  /** Tiny watcher revision probe: clients fetch the full graph only when it changed. */
+  app.get('/api/index/revision', async () => ({ version: projectIndexService.version, root: workspaceService.workspacePath }));
   /** Latest available index (refreshes automatically after a workspace switch). */
   app.get('/api/index', async () => {
     if (projectIndexService.needsRebuild()) {

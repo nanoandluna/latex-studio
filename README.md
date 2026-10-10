@@ -1,4 +1,8 @@
-# LaTeX Studio
+# LaTeX Studio V1.0
+
+[![CI](https://github.com/nanoandluna/latex-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/nanoandluna/latex-studio/actions/workflows/ci.yml)
+
+**[Download the stable release](https://github.com/nanoandluna/latex-studio/releases/latest)** · [中文使用指南](docs/QUICKSTART.zh-CN.md) · [Upgrade from V0.5](docs/UPGRADE.md) · [V1.0 release notes](docs/RELEASE-v1.0.0.md)
 
 A **local-first research writing workspace** for graduate students and researchers: open a local `.tex` project in your browser, edit it with Monaco, compile with your local TeX distribution, preview the PDF live, search across your entire project, take snapshots before risky edits, and see live diagnostics without building.
 
@@ -6,6 +10,15 @@ A **local-first research writing workspace** for graduate students and researche
 > Local-first · offline · no account · single user.
 
 ![LaTeX Studio — workspace with editor and PDF preview](docs/images/app.png)
+
+## What is new in V1.0
+
+- **Recoverable drafts** — project-scoped browser sessions restore open tabs and unsaved text after reload. Storage failures are visible.
+- **Reliable saves** — serialized per-file saves, atomic file publication, disk-conflict diff and explicit resolution. Typing during a save stays dirty.
+- **Save before build** — all dirty files are saved before compilation; a save failure stops the build.
+- **Verified recovery** — hash-checked snapshots restore deleted files and directories, with pre-restore protection.
+- **Literature bridge** — search metadata/DOI, insert or copy citations, open papers, and follow Zotero / Better BibTeX file exports. Citation context follows the assembled include order.
+- **Ready to run** — a prebuilt ZIP with launchers, local editor workers, lazy loading, patched dependencies and automated release verification.
 
 ## Features
 
@@ -17,14 +30,14 @@ A **local-first research writing workspace** for graduate students and researche
 - **Auto Compile** — debounced rebuild after each save.
 - **SyncTeX bidirectional** — Ctrl+Click source → PDF page; Ctrl+Click PDF → exact source line.
 
-### Project Intelligence *(V0.2–V0.3)*
+### Project Intelligence
 
 - **Project Index** — incremental scanner tracking sections, labels, references, citations, figures, tables, equations, packages, includes; editor buffers re-indexed debounced without disk writes.
 - **Outline & Navigator** — sidebar tabs: section tree with compiled numbering, whole-project navigator (figures / tables / equations / citations / labels) with usage-count badges and undefined/unused flags.
 - **Live Diagnostics** — undefined references, duplicate labels, undefined citations appear in Problems without building.
 - **Writing Checks** *(toggleable)* — repeated words, long sentences, TODO/FIXME, empty sections, suspicious punctuation.
 
-### Writer's Safety *(V0.4)*
+### Writer's Safety
 
 - **Snapshots** — atomic, SHA-256 verified, retention policy (max 30 + daily coalescing). Triggers: manual, pre-replace, pre-restore, build-ok (configurable).
 - **History Browser** — timeline of all snapshots with per-file change summary.
@@ -32,13 +45,13 @@ A **local-first research writing workspace** for graduate students and researche
 - **Restore** — always writes a `pre-restore` safety snapshot first; validates every path through the workspace jail.
 - **Replace All safety** — mandatory `pre-replace` snapshot before applying bulk replacements.
 
-### Search & Statistics *(V0.4)*
+### Search & Statistics
 
 - **Project Search** — `Ctrl+Shift+F`; case sensitivity, whole word, regex, glob filters; results grouped by file with click-to-jump.
 - **Replace All** — preview → confirm → auto-snapshot → atomic apply.
 - **Paper Statistics** — CJK characters · Latin words · numeric tokens counted separately; LaTeX commands/comments/math excluded; project/chapter/file aggregation.
 
-### Portability *(V0.4)*
+### Portability
 
 - **ZIP Export** — sources only (`.build/`, `.latex-studio/`, artifacts excluded).
 - **ZIP Import** — path-jail validated, size-capped, refuses non-empty targets.
@@ -107,8 +120,8 @@ latexmk --version
 ### 3. Doctor
 
 ```bash
-pnpm doctor          # human-readable, exit 0 = READY / exit 1 = NOT READY
-pnpm doctor --json   # machine-readable for CI
+pnpm run doctor          # human-readable, exit 0 = READY / exit 1 = NOT READY
+pnpm run doctor --json   # machine-readable for CI
 ```
 
 ### 4. Full release check
@@ -117,7 +130,7 @@ pnpm doctor --json   # machine-readable for CI
 pnpm release:check
 ```
 
-Runs: `doctor → typecheck → unit/integration → real-LaTeX tests → real-build E2E → web+server builds`.
+Runs: `doctor → production build → typecheck → unit/integration + stress → production security smoke → dependency audit → real-LaTeX tests → real-build E2E`.
 
 Individual steps:
 
@@ -127,22 +140,16 @@ pnpm test:e2e:latex   # real-build Playwright suite
 pnpm test:stress      # 500/1000-chapter performance benchmarks
 ```
 
-### Expected output
+### Gate rules
 
-```text
-Doctor               PASS
-Typecheck            PASS
-Unit/Integration     PASS
-Real LaTeX           PASS
-Real E2E             PASS
-Web Build            PASS
-Server Build         PASS
+All steps must pass. Real compilation requires XeLaTeX, pdfLaTeX, LuaLaTeX,
+latexmk, BibTeX, Biber and SyncTeX; missing tools produce a hard BLOCKED failure.
+Default development tests may skip real compilation. Release fixtures validate
+actual `%PDF-` bytes, bibliography resolution and SyncTeX. Environment-specific
+browser cases (e.g. missing compiler on a machine with TeX) are intentionally skipped.
 
-RESULT:
-READY FOR v<version>
-```
-
-Gate rules: without `RUN_LATEX_TESTS=1` real-compilation tests SKIP quietly; with it, missing TeX is hard `BLOCKED` — skips never masquerade as passes. Real assertions check `%PDF-` headers on disk, not just HTTP 200.
+GitHub CI checks Windows, macOS and Linux. The release workflow installs a full
+fixture toolchain on Linux and runs this same gate.
 
 ## Security
 
@@ -150,7 +157,7 @@ Binds to `127.0.0.1` only. Protects against localhost CSRF / DNS-rebinding:
 
 - **CORS** never reflects foreign origins.
 - **Host allow-list** rejects DNS rebinding.
-- **Instance token** — HttpOnly SameSite=Strict cookie + `x-latex-studio-token` header required on all `/api/*`.
+- **Instance token** — an HttpOnly SameSite=Strict cookie or `x-latex-studio-token` header authenticates API requests; the token bootstrap is origin-checked.
 - **Path jail** — `safeResolve()` + `safeRealpathInside()` on every filesystem operation.
 - **Structured errors** — `{ error: { code, message } }` throughout; frontend never string-matches.
 
@@ -158,20 +165,29 @@ Automated tests run with `NODE_ENV=test` (opts out of auth layer).
 
 ## Requirements
 
-- Node.js ≥ 20, pnpm ≥ 9
+- Node.js ≥ 22.13, pnpm 11.18.0
 - TeX distribution for compiling (MiKTeX / TeX Live; latexmk needs Perl on Windows)
 
 ## Installation & Run
 
+For the release ZIP, extract it and run `start.cmd` (Windows) or `sh start.sh`
+(macOS/Linux). The launchers install production dependencies on first use, then
+serve the already-built application at <http://localhost:3210>. Keep the terminal
+open. The ZIP is a Node application, not a native installer. First installation
+requires network access; installed editor and PDF assets run locally.
+
+For a source checkout:
+
 ```bash
-pnpm install
-
-pnpm dev              # development → http://localhost:5173
-
-pnpm build && pnpm start   # production → http://localhost:3210
+npm install -g pnpm@11.18.0
+pnpm install --frozen-lockfile
+pnpm dev                  # development → http://localhost:5173
+pnpm build
+pnpm start                # production → http://localhost:3210
 ```
 
-Open Workspace → pick folder → edit → `Ctrl+S` → `Ctrl+B`.
+Open Workspace → enter an existing folder path or create a template → edit →
+`Ctrl+S` → `Ctrl+B`. Use **Save All Files** in the command palette to save every tab.
 
 ## Testing
 
@@ -181,6 +197,7 @@ pnpm test:latex       # real compilation tests (needs TeX)
 pnpm test:stress      # 500/1000-chapter performance benchmarks
 pnpm test:e2e         # Playwright suite
 pnpm release:check    # the full gate
+pnpm package:release  # source + prebuilt ZIP and SHA-256 (run after build)
 ```
 
 ## Developer Observability
@@ -205,36 +222,31 @@ Build states: `Ready → Building… → Build successful / Build failed / Cance
 | Port 3210 busy | Set `PORT=<n>` env var. |
 | SyncTeX jump does nothing | Rebuild once (needs `-synctex=1` output). |
 
-## Known limitations (v0.5.1)
+## Scope and limitations (V1.0)
 
 - Chapter attribution follows the assembled document, so `\input`-ed prose counts toward its chapter; files that are not reachable from the main file keep per-file ranges and are listed after the include graph.
 - The PDF outline rail sorts sections per file, not by true include order across files.
-- Citation Workspace is read-only by design; the .bib file belongs to your reference manager (Zotero / Better BibTeX).
+- Bibliography files remain managed by Zotero / Better BibTeX or your editor. The citation panel inserts commands into .tex files; it does not manage a reference-manager database.
 - Reading position is stored per workspace in `.latex-studio/cache/reading-state.json` and resets when the cache is cleared.
 
 - PDF search highlights matches per text-item; hyphenation across line ends may still be missed.
 - Single workspace at a time; single user by design.
 - Per-file parse cache persists in `.latex-studio/cache/` (schema-gated); assembled graph rebuilt in memory each session.
 - Spell/grammar checking not provided.
-- Linux `fs.watch` non-recursive fallback relies on debounced mtime diff (not tested on real Linux).
+- Filesystem notifications depend on the operating system; the browser probes graph revisions while visible and refreshes on focus.
 - Project search scans raw file lines — comments and verbatim text are **not** excluded. Deliberate: Replace All must write back original lines, so search and replace must see the same text.
 - Replace preview shows per-file counts rather than per-hunk before/after context; the real before/after is in History under the automatic `pre-replace` snapshot.
 - Replace previews are held in memory for 10 minutes and are single-use; run Preview again after that.
-- Tabs with unsaved edits keep their buffer when a restore or Replace All rewrites the file underneath; the buffer wins until an explicit save. Clean tabs re-sync automatically.
+- Dirty tabs keep their buffer after restore, replace-all or external writes; saving requires explicit disk-conflict resolution. Clean tabs re-sync automatically.
+- Draft recovery uses browser local storage, scoped to workspace and origin; clearing browser data removes it. Use snapshots/export for independent backups.
+- Snapshot restore is atomic per file; disk errors can leave a partial restore. Failed files are reported, with a pre-restore snapshot for recovery.
 
-## Roadmap
+## Development direction
 
-- ~~V0.1 — Local LaTeX Foundation~~ ✅
-- ~~V0.1.x — Security / Hardening~~ ✅
-- ~~V0.2.x — LaTeX IDE Intelligence~~ ✅
-- ~~V0.3.x — Research Workspace Intelligence · Intelligence Hardening~~ ✅
-- ~~V0.4.0 — Writer's Safety + Search~~ ✅ (Snapshot · History/Diff/Restore · Project Search & Replace · Paper Statistics · ZIP Export/Import)
-- ~~V0.4.1 — Review hardening~~ ✅ (P0 partial-restore fix · fs.watch bulk-write perf overhaul · full search/replace/snapshot/restore E2E · auto-save settings UI)
-- ~~V0.4.2 — UX & Release Polish~~ ✅ (Diff in main workspace · simplified header · typography & reading comfort · typed status bar · build progress UX · recovery hardening)
-- ~~V0.5.0 — Research Writing Workspace~~ ✅ (Paper Overview · Citation Workspace · Reading Workspace: thumbnails/outline/reading position · Terminology Consistency · search section context)
-- ~~V0.5.1 — Research Workflow Hardening~~ ✅ (cross-file chapter attribution · BibLaTeX edge cases · Navigator citation-group migration · reading-position resume race)
-- V0.6.0 — Literature Bridge: Zotero / Better BibTeX seamless .bib workflow · citation context
-- V0.7.0 — Reliability: snapshot format evolution · migration · backup/recovery hardening
-- V1.0 — Graduate Research Workspace
+V1.0 completes the local research workspace: editing and compilation, project
+intelligence, writer safety, literature use and PDF reading. Historical design
+notes remain in `docs/V0.*-PLAN.md`; completed features are recorded in
+[CHANGELOG.md](CHANGELOG.md). Future work can focus on native distribution,
+include-order PDF outlines and richer replace previews.
 
 Product razor: 只做让研究生更快、更稳定、更清晰地完成一篇高质量论文的功能。

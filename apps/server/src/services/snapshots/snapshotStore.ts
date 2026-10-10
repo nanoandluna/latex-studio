@@ -3,6 +3,8 @@ import type { SnapshotManifest, SnapshotReason } from '@latex-studio/shared';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { safeResolve } from '../../utils/paths.js';
+import { safeRealpathInside, safeRealpathForWrite } from '../../utils/paths.js';
+import { ApiError } from '../../errors.js';
 
 /**
  * V0.4 Snapshot Store — atomic, hash-verified local snapshots.
@@ -44,10 +46,27 @@ export class SnapshotStore {
     }
     const manifests: SnapshotManifest[] = [];
     for (const d of dirs) {
+      if (!/^snap_[0-9]{14}_[a-z0-9]{1,8}$/.test(d)) continue;
       try {
         const raw = await fs.promises.readFile(path.join(this.baseDir, d, 'manifest.json'), 'utf8');
         const m = JSON.parse(raw) as SnapshotManifest;
-        if (m?.snapshotId && Array.isArray(m.files)) manifests.push(m);
+        if (m.version !== 1 || m.snapshotId !== d || !Array.isArray(m.files) ||
+            m.fileCount !== m.files.length || !Number.isFinite(m.createdAt)) continue;
+        const paths = new Set<string>();
+        let bytes = 0;
+        for (const f of m.files) {
+          if (typeof f.path !== 'string' || paths.has(f.path) || !/^[a-f0-9]{64}$/.test(f.hash) ||
+              !Number.isSafeInteger(f.size) || f.size < 0) throw new Error('Invalid manifest entry');
+          if (f.path.includes('\\') || f.path.split('/').some((part) => ['.', '..', '.latex-studio', '.build'].includes(part))) throw new Error('Noncanonical snapshot path');
+          const resolved = safeResolve(this.root, f.path);
+          if (resolved === path.resolve(this.root) || f.path.startsWith('.latex-studio/') || f.path.startsWith('.build/')) {
+            throw new Error('Invalid snapshot path');
+          }
+          paths.add(f.path);
+          bytes += f.size;
+        }
+        if (bytes !== m.totalBytes || sha256(m.files.map((f) => `${f.path}:${f.hash}`).sort().join('\n')) !== m.contentHash) continue;
+        manifests.push(m);
       } catch {
         /* corrupt entry → invisible */
       }
@@ -88,11 +107,18 @@ export class SnapshotStore {
     const id = `snap_${stamp}_${rand}`;
     const tmpDir = path.join(this.baseDir, `.tmp-${id}`);
     const finalDir = this.snapshotDir(id);
+    const cleanTemporary = async () => {
+      try {
+        await safeRealpathForWrite(this.root, tmpDir);
+        await fs.promises.rm(tmpDir, { recursive: true, force: true });
+      } catch { /* never clean up through an escaping metadata link */ }
+    };
 
     const hashes: string[] = [];
     let totalBytes = 0;
 
     try {
+      await safeRealpathForWrite(this.root, tmpDir);
       // Read+write in bounded parallel batches. A 1000-file snapshot used to
       // walk the project serially, which alone blew the Replace All budget —
       // each file costs a read, a stat and a write, and on Windows those add
@@ -127,9 +153,12 @@ export class SnapshotStore {
           fileEntries[i] = await processOne(input.files[i]);
         }
       };
-      await Promise.all(
+      const settled = await Promise.allSettled(
         Array.from({ length: Math.min(CONCURRENCY, input.files.length) }, worker)
       );
+      const rejected = settled.find((r) => r.status === 'rejected');
+      if (rejected?.status === 'rejected') throw rejected.reason;
+      await fs.promises.mkdir(tmpDir, { recursive: true });
 
       for (const e of fileEntries) {
         hashes.push(`${e.path}:${e.hash}`);
@@ -140,8 +169,16 @@ export class SnapshotStore {
 
       if (input.skipIfUnchanged) {
         const newest = (await this.list())[0];
-        if (newest && newest.contentHash === contentHash) {
-          await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+        let intact = !!newest && newest.contentHash === contentHash;
+        if (intact) {
+          try {
+            for (let i = 0; i < newest.files.length; i += CONCURRENCY) {
+              await Promise.all(newest.files.slice(i, i + CONCURRENCY).map((f) => this.readFile(newest.snapshotId, f.path, f)));
+            }
+          } catch { intact = false; }
+        }
+        if (intact) {
+          await cleanTemporary();
           return { manifest: newest, skipped: true };
         }
       }
@@ -173,7 +210,7 @@ export class SnapshotStore {
       await fs.promises.rename(tmpDir, finalDir); // atomic publish
       return { manifest, skipped: false };
     } catch (err) {
-      await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      await cleanTemporary();
       throw err;
     }
   }
@@ -185,10 +222,17 @@ export class SnapshotStore {
    * are driven by manifest entries, and a manifest is data we wrote once and
    * read back many times.
    */
-  async readFile(id: string, relPath: string): Promise<Buffer> {
+  async readFile(id: string, relPath: string, expected?: SnapshotManifest['files'][number]): Promise<Buffer> {
     const filesDir = path.join(this.snapshotDir(id), 'files');
     const abs = safeResolve(filesDir, relPath);
-    return fs.promises.readFile(abs);
+    await safeRealpathInside(this.root, abs);
+    const entry = expected ?? (await this.get(id))?.files.find((f) => f.path === relPath);
+    if (!entry) throw new ApiError('SNAPSHOT_FAILED', 'The file is missing from the snapshot manifest.');
+    const buffer = await fs.promises.readFile(abs);
+    if (buffer.length !== entry.size || sha256(buffer) !== entry.hash) {
+      throw new ApiError('SNAPSHOT_FAILED', `Snapshot integrity check failed for ${relPath}. No restore was applied.`);
+    }
+    return buffer;
   }
 
   /** All stored file paths of a snapshot. */
@@ -200,6 +244,7 @@ export class SnapshotStore {
   async delete(id: string): Promise<boolean> {
     const dir = this.snapshotDir(id);
     if (!fs.existsSync(dir)) return false;
+    await safeRealpathInside(this.root, this.baseDir);
     await fs.promises.rm(dir, { recursive: true, force: true });
     return true;
   }

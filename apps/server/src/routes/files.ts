@@ -54,12 +54,18 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/file/save', async (req, reply) => {
-    const { path: rel, content } = (req.body ?? {}) as { path?: string; content?: string };
+    const { path: rel, content, expectedContent, workspacePath } = (req.body ?? {}) as {
+      path?: string; content?: string; expectedContent?: string | null; workspacePath?: string;
+    };
     if (!rel || typeof content !== 'string') {
       return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Missing path or content' } });
     }
+    if ((expectedContent !== undefined && expectedContent !== null && typeof expectedContent !== 'string') ||
+        (workspacePath !== undefined && typeof workspacePath !== 'string')) {
+      return reply.code(400).send({ error: { code: 'INVALID_ARGUMENT', message: 'Invalid save baseline or workspace' } });
+    }
     try {
-      await workspaceService.saveFile(rel, content);
+      await workspaceService.saveFile(rel, content, expectedContent, workspacePath);
       // Saved content is now the disk truth — drop any editor buffer copy so
       // the project index refreshes from disk.
       projectIndexService.dropBuffer(rel);

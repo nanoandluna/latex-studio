@@ -6,6 +6,7 @@ import { useProjectIndexStore } from '../../stores/projectIndexStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useEffect, useMemo, useState } from 'react';
 import type { Problem } from '@latex-studio/shared';
+import { api } from '../../api/client';
 
 export function ProblemsPanel() {
   const index = useProjectIndexStore((s) => s.index);
@@ -49,11 +50,9 @@ export function ProblemsPanel() {
       return;
     }
     let cancelled = false;
-    import('../../api/client').then(({ api }) =>
-      api.writingChecks().then((r) => {
+    api.writingChecks().then((r) => {
         if (!cancelled) setWriting(r.diagnostics);
-      }).catch(() => {})
-    );
+      }).catch(() => {});
     return () => { cancelled = true; };
   }, [writingChecksEnabled, index]);
 
@@ -67,11 +66,9 @@ export function ProblemsPanel() {
     }
     let cancelled = false;
     const t = setTimeout(() => {
-      import('../../api/client').then(({ api }) =>
-        api.terminologyHits().then((r) => {
+      api.terminologyHits().then((r) => {
           if (!cancelled) setTermHits(r.hits);
-        }).catch(() => {})
-      );
+        }).catch(() => {});
     }, 800);
     return () => {
       cancelled = true;

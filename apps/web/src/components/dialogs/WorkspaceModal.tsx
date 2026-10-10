@@ -61,7 +61,11 @@ export function WorkspaceModal() {
   const submitCreate = async () => {
     if (!templateId || !parentDir.trim()) return;
     const name = newDir.trim() || templateId;
-    const target = `${parentDir.replace(/[\\/]+$/, '')}\\${name}`;
+    if (/[\\/]/.test(name) || name === '.' || name === '..') {
+      setError('Project name must be a single folder name.');
+      return;
+    }
+    const target = `${parentDir.replace(/[\\/]+$/, '')}/${name}`;
     setBusy(true);
     setError(null);
     try {

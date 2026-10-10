@@ -17,7 +17,7 @@ import { workspaceService } from './workspaceService.js';
 import { FileWatcher } from './fileWatcher.js';
 import { GRAPH_SCHEMA_VERSION } from '@latex-studio/latex-parser';
 
-const PARSER_VERSION = '0.3.1';
+const PARSER_VERSION = '1.0.0';
 
 interface CacheEntry {
   /** mtimeMs + size fingerprint of the file on disk at parse time */

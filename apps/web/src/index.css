@@ -30,11 +30,14 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-zinc-300 rounded-full dark:bg-zinc-700;
+  background: var(--color-zinc-300);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-zinc-400 dark:bg-zinc-600;
+  background: var(--color-zinc-400);
 }
+.dark ::-webkit-scrollbar-thumb { background: var(--color-zinc-700); }
+.dark ::-webkit-scrollbar-thumb:hover { background: var(--color-zinc-600); }
 ::-webkit-scrollbar-track {
   background: transparent;
 }

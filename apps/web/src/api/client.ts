@@ -88,7 +88,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ ok: boolean; workspace: string | null }>('/api/health'),
 
-  env: () => request<LatexEnvironment>('/api/env'),
+  env: (force = false) => request<LatexEnvironment>(`/api/env${force ? '?force=1' : ''}`),
 
   openWorkspace: (path: string) =>
     request<{ path: string; name: string; mainFile: string | null }>('/api/workspace/open', {
@@ -111,6 +111,7 @@ export const api = {
 
   // ---- Project Index (V0.2) ----
   index: () => request<ProjectIndex & { version?: number }>('/api/index'),
+  indexRevision: () => request<{ version: number; root: string | null }>('/api/index/revision'),
   refreshIndex: () =>
     request<{
         filesParsed: number;
@@ -170,10 +171,10 @@ export const api = {
       `/api/file/read?path=${encodeURIComponent(path)}`
     ),
 
-  saveFile: (path: string, content: string) =>
+  saveFile: (path: string, content: string, expectedContent?: string | null, workspacePath?: string) =>
     request<{ ok: boolean }>('/api/file/save', {
       method: 'POST',
-      body: JSON.stringify({ path, content }),
+      body: JSON.stringify({ path, content, expectedContent, workspacePath }),
     }),
 
   createFile: (path: string, content = '') =>

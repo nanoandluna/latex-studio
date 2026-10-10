@@ -61,6 +61,7 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 
 export function isTextFile(name: string): boolean {
+  if (path.basename(name) === '.gitignore') return true;
   const ext = path.extname(name).toLowerCase();
   if (TEXT_EXTENSIONS.has(ext)) return true;
   if (!ext) return false;
@@ -96,4 +97,21 @@ export async function safeRealpathInside(root: string, absPath: string): Promise
     throw new PathTraversalError(absPath);
   }
   return realAbs;
+}
+
+/** Validate existing ancestors too, so creating a new file cannot follow an escaping junction. */
+export async function safeRealpathForWrite(root: string, absPath: string): Promise<void> {
+  let probe = absPath;
+  while (true) {
+    try {
+      await fs.lstat(probe);
+      await safeRealpathInside(root, probe);
+      return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      const parent = path.dirname(probe);
+      if (parent === probe) throw err;
+      probe = parent;
+    }
+  }
 }

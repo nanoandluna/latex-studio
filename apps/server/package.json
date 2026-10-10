@@ -1,6 +1,6 @@
 {
   "name": "@latex-studio/server",
-  "version": "0.5.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/server.js",
@@ -12,11 +12,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fastify/cors": "^10.0.1",
-    "@fastify/static": "^8.0.3",
+    "@fastify/cors": "^11.3.1",
+    "@fastify/static": "^10.1.6",
     "@latex-studio/latex-parser": "workspace:*",
     "@latex-studio/shared": "workspace:*",
-    "fastify": "^5.2.1",
+    "fastify": "^5.12.5",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
@@ -24,6 +24,6 @@
     "pdfjs-dist": "^4.10.38",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "vitest": "^4.1.11"
   }
 }

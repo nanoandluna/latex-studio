@@ -6,7 +6,9 @@ import type {
   SnapshotFileEntry,
   SnapshotDiffEntry,
 } from '@latex-studio/shared';
-import { safeResolve, safeRealpathInside } from '../utils/paths.js';
+import { safeResolve, safeRealpathInside, safeRealpathForWrite } from '../utils/paths.js';
+import { atomicWrite } from '../utils/atomicWrite.js';
+import { ApiError } from '../errors.js';
 import { workspaceService } from './workspaceService.js';
 import { collectSourceFiles } from '../utils/walkWorkspace.js';
 import { SnapshotStore } from './snapshots/snapshotStore.js';
@@ -159,7 +161,7 @@ export class SnapshotService {
     const root = workspaceService.requireWorkspace();
     try {
       const abs = safeResolve(root, rel);
-      await safeRealpathInside(root, abs);
+      await safeRealpathForWrite(root, abs);
       let original = '';
       try {
         original = (await this.storeFor(root).readFile(id, rel)).toString('utf8');
@@ -200,7 +202,21 @@ export class SnapshotService {
     const m = await this.get(id);
     if (!m) throw new Error(`Unknown snapshot: ${id}`);
 
-    const wanted = opts.files && opts.files.length > 0 ? new Set(opts.files) : null;
+    if (opts.files !== undefined && (!Array.isArray(opts.files) || !opts.files.length || opts.files.some((f) => typeof f !== 'string'))) {
+      throw new ApiError('INVALID_ARGUMENT', 'A partial restore needs at least one file path.');
+    }
+    const wanted = opts.files ? new Set(opts.files) : null;
+    if (wanted && [...wanted].some((rel) => !m.files.some((f) => f.path === rel))) {
+      throw new ApiError('INVALID_ARGUMENT', 'A selected file is not part of this snapshot.');
+    }
+    // Verify all bytes and targets before changing any workspace file.
+    const store = this.storeFor(root);
+    const contents = new Map<string, Buffer>();
+    for (const f of m.files) {
+      if (wanted && !wanted.has(f.path)) continue;
+      await safeRealpathForWrite(root, safeResolve(root, f.path));
+      contents.set(f.path, await store.readFile(id, f.path, f));
+    }
 
     // 1) safety net: capture the current state before anything is overwritten
     const { manifest: pre } = await this.create('pre-restore', `before restore ${id}`);
@@ -213,38 +229,28 @@ export class SnapshotService {
     let restoredFiles = 0;
     const failed: string[] = [];
     try {
-      // 2) remove workspace source files that are NOT part of the snapshot
-      //    (only among collectible source files — never touch anything else).
-      //    A partial restore must not delete anything: the point of restoring
-      //    one file is to salvage it, not to roll the whole tree back and take
-      //    everything written since the snapshot with it.
-      if (!wanted) {
-        const currentFiles = await collectSourceFiles(root);
-        for (const rel of currentFiles) {
-          if (!m.files.some((f) => f.path === rel)) {
-            try {
-              await fsp.rm(safeResolve(root, rel), { force: true });
-              removedFiles++;
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-      }
-
-      // 3) write snapshot files back (jail-validated)
-      const store = this.storeFor(root);
+      // Restore complete files before considering removals.
       for (const f of m.files) {
         if (wanted && !wanted.has(f.path)) continue;
         try {
           const abs = safeResolve(root, f.path);
-          await safeRealpathInside(root, abs); // link guard
-          const buf = await store.readFile(id, f.path);
-          await fsp.mkdir(path.dirname(abs), { recursive: true });
-          await fsp.writeFile(abs, buf);
+          await atomicWrite(root, abs, contents.get(f.path)!);
           restoredFiles++;
         } catch {
           failed.push(f.path);
+        }
+      }
+      // Only delete extra sources after every selected file was restored successfully.
+      if (!wanted && failed.length === 0) {
+        const tracked = new Set(m.files.map((f) => f.path));
+        for (const rel of await collectSourceFiles(root)) {
+          if (tracked.has(rel)) continue;
+          try {
+            const abs = safeResolve(root, rel);
+            await safeRealpathInside(root, abs);
+            await fsp.rm(abs);
+            removedFiles++;
+          } catch { failed.push(rel); }
         }
       }
     } finally {

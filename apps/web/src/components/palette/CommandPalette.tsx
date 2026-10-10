@@ -58,7 +58,8 @@ export function CommandPalette() {
   const commands = useMemo<Command[]>(() => {
     const cmds: Command[] = [
       { id: 'build', label: 'Build', hint: 'Ctrl+B', run: () => void build() },
-      { id: 'save', label: 'Save File', hint: 'Ctrl+S', run: () => void saveActive() },
+      { id: 'save', label: 'Save File', hint: 'Ctrl+S', run: () => void saveActive().catch(() => {}) },
+      { id: 'save-all', label: 'Save All Files', run: () => void useEditorStore.getState().saveAll().catch(() => {}) },
       {
         id: 'open-workspace',
         label: 'Open Workspace…',

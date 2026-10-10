@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useCitationWorkspaceStore } from '../../stores/citationWorkspaceStore';
 import { useEditorStore } from '../../stores/editorStore';
 import type { CitationEntryView } from '@latex-studio/shared';
+import { useProjectIndexStore } from '../../stores/projectIndexStore';
 
 type Filter = 'all' | 'used' | 'unused' | 'undefined' | 'duplicate';
 
@@ -14,9 +15,8 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 /**
- * V0.5-PLAN 2 — Citation Workspace: how the literature is actually used in
- * this paper. Strictly read-only — the .bib file belongs to Zotero/Better
- * BibTeX; this panel only shows where its keys land in the writing.
+ * Literature usage and citation insertion. Bibliography files remain owned
+ * by the reference manager; insertion edits only the active TeX buffer.
  */
 export function CitationWorkspacePanel() {
   const { data, loading, error } = useCitationWorkspaceStore();
@@ -24,16 +24,21 @@ export function CitationWorkspacePanel() {
   const openFileAtLine = useEditorStore((s) => s.openFileAtLine);
   const [filter, setFilter] = useState<Filter>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const activePath = useEditorStore((s) => s.activePath);
+  const revision = useProjectIndexStore((s) => s.version);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, revision]);
 
   if (loading && !data) return <div className="p-3 text-[13px] text-zinc-400">Collecting citations…</div>;
   if (error) return <div className="p-3 text-[13px] text-red-600">{error}</div>;
   if (!data) return <div className="p-3 text-[13px] text-zinc-400">No citations yet.</div>;
 
   const filtered = data.entries.filter((e) => {
+    if (query.trim() && ![e.key, e.title, e.author, e.year, e.doi].filter(Boolean).join(' ').toLowerCase().includes(query.trim().toLowerCase())) return false;
     if (filter === 'all') return true;
     if (filter === 'used') return e.used;
     if (filter === 'unused') return !e.used && !e.undefinedKey;
@@ -46,6 +51,8 @@ export function CitationWorkspacePanel() {
 
   return (
     <div data-testid="citation-workspace" className="p-3">
+      <input aria-label="Search literature" placeholder="Key, title, author, year or DOI…" value={query} onChange={(e) => setQuery(e.target.value)} className="mb-2 w-full rounded border border-zinc-300 bg-transparent px-2 py-1.5 text-xs dark:border-zinc-700" />
+      {notice && <p role="status" className="mb-2 text-xs text-blue-600">{notice}</p>}
       <div className="mb-2 flex flex-wrap gap-1">
         {FILTERS.map((f) => (
           <button
@@ -83,13 +90,15 @@ export function CitationWorkspacePanel() {
               })
             }
             onOpen={(file, line) => void openFileAtLine(file, line)}
+            canInsert={!!activePath?.endsWith('.tex') && !e.undefinedKey && !/[\\{}]/.test(e.key)}
+            onInsert={() => window.dispatchEvent(new CustomEvent('latex-studio:insert-citation', { detail: { path: activePath, key: e.key } }))}
+            onCopy={() => navigator.clipboard.writeText(`\\cite{${e.key}}`).then(() => setNotice(`Copied ${e.key}`)).catch(() => setNotice('Clipboard unavailable. Open a .tex file and use Insert citation.'))}
           />
         ))}
       </div>
 
       <p className="mt-3 text-xs leading-relaxed text-zinc-400">
-        Read-only: the .bib file is managed by your reference manager (Zotero / Better BibTeX);
-        this workspace shows where its keys are used in the paper.
+        Keep a Zotero / Better BibTeX auto-export inside your project. Changes to .bib files are indexed automatically; Insert citation writes to your active .tex file.
       </p>
     </div>
   );
@@ -100,12 +109,19 @@ function CitationRow({
   expanded,
   onToggle,
   onOpen,
+  canInsert,
+  onInsert,
+  onCopy,
 }: {
   entry: CitationEntryView;
   expanded: boolean;
   onToggle: () => void;
   onOpen: (file: string, line: number) => void;
+  canInsert: boolean;
+  onInsert: () => void;
+  onCopy: () => void;
 }) {
+  const link = literatureLink(entry);
   return (
     <div
       data-entry={entry.key}
@@ -144,7 +160,10 @@ function CitationRow({
         )}
       </button>
 
-      <div className="mt-1 flex gap-2">
+      <div className="mt-1 flex flex-wrap gap-2">
+        <button onClick={onInsert} disabled={!canInsert} title="Insert at the cursor in the active .tex file" className="rounded border border-zinc-300 px-1.5 py-0.5 text-[11px] disabled:opacity-40 dark:border-zinc-700">Insert citation</button>
+        <button onClick={onCopy} className="rounded border border-zinc-300 px-1.5 py-0.5 text-[11px] dark:border-zinc-700">Copy citation</button>
+        {link && <a href={link} target="_blank" rel="noopener noreferrer" className="px-1 py-0.5 text-[11px] text-blue-600">Open paper ↗</a>}
         {entry.bibFile && (
           <button
             onClick={() => onOpen(entry.bibFile!, entry.bibLine ?? 1)}
@@ -189,4 +208,16 @@ function CitationRow({
         ))}
     </div>
   );
+}
+
+/** Bibliography fields are untrusted: only web URLs may be opened. */
+export function literatureLink(entry: Pick<CitationEntryView, 'doi' | 'url'>): string | null {
+  if (entry.doi) {
+    const doi = entry.doi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').trim();
+    if (/^10\.\d{4,9}\/\S+$/i.test(doi)) return `https://doi.org/${doi}`;
+  }
+  try {
+    const url = new URL(entry.url ?? '');
+    return ['https:', 'http:'].includes(url.protocol) ? url.href : null;
+  } catch { return null; }
 }

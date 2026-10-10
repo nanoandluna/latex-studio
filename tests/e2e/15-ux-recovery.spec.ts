@@ -149,8 +149,12 @@ test.describe('18 · header, palette & recovery', () => {
     await expect(page.locator('.view-lines')).toContainText('user-dirty-marker');
     await expect(page.locator('.view-lines')).not.toContainText('preamble');
 
-    // save (user wins — buffer is written to disk as-is)
+    // V1: a stale dirty buffer is kept, but overwrite requires a reviewed choice.
     await page.keyboard.press('Control+s');
+    await page.getByRole('button', { name: 'Review disk changes', exact: true }).click();
+    const conflict = page.getByRole('dialog', { name: 'Review disk changes', exact: true });
+    await expect(conflict.locator('.monaco-diff-editor')).toBeVisible();
+    await conflict.getByRole('button', { name: 'Save my version', exact: true }).click();
     await expect(page.getByText('✓ Saved', { exact: true })).toBeVisible();
 
     // Scenario B — clean buffer: the next replace-all syncs the editor

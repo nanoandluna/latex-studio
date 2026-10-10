@@ -28,7 +28,7 @@ export function useHotkeys(): void {
         showPanel('history');
       } else if (key === 's') {
         e.preventDefault();
-        void useEditorStore.getState().saveActive();
+        void useEditorStore.getState().saveActive().catch(() => {});
       } else if (key === 'f' && e.shiftKey) {
         e.preventDefault();
         showPanel('search');

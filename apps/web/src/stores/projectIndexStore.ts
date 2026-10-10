@@ -20,6 +20,7 @@ interface ProjectIndexState {
 
 let bufferTimers = new Map<string, number>();
 let refreshTimer: number | null = null;
+let generation = 0;
 
 export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
   index: null,
@@ -28,10 +29,12 @@ export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
   lastError: null,
 
   refresh: async () => {
+    const epoch = generation;
     if (get().loading) return;
     set({ loading: true });
     try {
       const body = await api.index() as ProjectIndex & { version?: number };
+      if (epoch !== generation) return;
       // V0.3 stale guard: never let an older revision overwrite a newer one.
       const v = body?.version ?? 0;
       if (v < get().version) {
@@ -40,18 +43,21 @@ export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
       }
       set({ index: body, version: v, loading: false, lastError: null });
     } catch (err) {
+      if (epoch !== generation) return;
       // Keep the previous index on failure — stale beats empty.
       set({ loading: false, lastError: (err as Error).message });
     }
   },
 
   pushBuffer: (path, content) => {
+    const epoch = generation;
     const prev = bufferTimers.get(path);
     if (prev) window.clearTimeout(prev);
     const t = window.setTimeout(async () => {
       bufferTimers.delete(path);
       try {
         const res = await api.updateIndexBuffer(path, content);
+        if (epoch !== generation) return;
         if (res) {
           const body = res as ProjectIndex & { version?: number };
           const v = body.version ?? 0;
@@ -71,6 +77,7 @@ export const useProjectIndexStore = create<ProjectIndexState>()((set, get) => ({
   },
 
   reset: () => {
+    generation++;
     for (const t of bufferTimers.values()) window.clearTimeout(t);
     bufferTimers = new Map();
     if (refreshTimer) window.clearTimeout(refreshTimer);
@@ -85,6 +92,7 @@ if (typeof window !== 'undefined') {
     const tab = useEditorStore
       .getState()
       .tabs.find((t) => t.path === e.detail.path);
-    useProjectIndexStore.getState().pushBuffer(e.detail.path, tab?.content ?? '');
+    if (tab && useEditorStore.getState().isDirty(tab)) useProjectIndexStore.getState().pushBuffer(e.detail.path, tab.content);
+    else void useProjectIndexStore.getState().refresh();
   }) as EventListener);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DiffEditor, loader } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
-import * as monacoNs from 'monaco-editor';
+import * as monacoNs from 'monaco-editor/esm/vs/editor/editor.api';
 import { api } from '../../api/client';
 import { useUiStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';

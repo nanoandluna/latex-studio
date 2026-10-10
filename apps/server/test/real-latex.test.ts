@@ -31,6 +31,15 @@ const bibtex = env.tools.some((t) => t.id === 'bibtex' && t.available);
 const biber = env.tools.some((t) => t.id === 'biber' && t.available);
 
 const RUN = process.env.RUN_LATEX_TESTS === '1';
+if (RUN) {
+  const required = ['xelatex', 'pdflatex', 'lualatex', 'latexmk', 'bibtex', 'biber', 'synctex'];
+  const missing = required.filter((id) => !env.tools.some((t) => t.id === id && t.available && !t.shellWrapperOnly));
+  if (missing.length) describe('Complete release toolchain', () => {
+    it('requires every compiler and bibliography tool exercised by the release fixtures', () => {
+      throw new Error(`BLOCKED: missing release tools: ${missing.join(', ')}. Real compilation skips cannot satisfy the release gate.`);
+    });
+  });
+}
 
 // ---- §十七: no silent skip inside the release gate -------------------------
 if (RUN && availableEngines.length === 0) {

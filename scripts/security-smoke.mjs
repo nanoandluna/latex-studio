@@ -1,5 +1,12 @@
 // Security smoke test against a running production server (enforcement ON).
-const BASE = 'http://127.0.0.1:3210';
+let localApp;
+if (process.env.SECURITY_SELF_HOST === '1') {
+  process.env.NODE_ENV = 'production';
+  const { createApp } = await import('../apps/server/dist/app.js');
+  localApp = await createApp();
+  await localApp.listen({ port: 0, host: '127.0.0.1' });
+}
+const BASE = localApp ? `http://127.0.0.1:${localApp.server.address().port}` : process.env.SECURITY_BASE_URL ?? 'http://127.0.0.1:3210';
 let pass = 0;
 let fail = 0;
 function check(name, cond, detail = '') {
@@ -19,6 +26,7 @@ async function hit(path, opts = {}, useCookie = true) {
   return res;
 }
 
+try {
 // 1. Unauthenticated API access is rejected
 {
   const r = await fetch(`${BASE}/api/workspace/tree`);
@@ -70,7 +78,7 @@ async function hit(path, opts = {}, useCookie = true) {
   const status = await new Promise((resolve) => {
     import('node:http').then(({ default: http }) => {
       const req = http.request(
-        { host: '127.0.0.1', port: 3210, path: '/api/workspace/tree', method: 'GET', headers: { host: 'evil.example.com' } },
+        { host: '127.0.0.1', port: Number(new URL(BASE).port), path: '/api/workspace/tree', method: 'GET', headers: { host: 'evil.example.com' } },
         (res) => {
           void res.resume();
           resolve(res.statusCode ?? 0);
@@ -107,5 +115,5 @@ async function hit(path, opts = {}, useCookie = true) {
 }
 
 console.log(`\n${fail === 0 ? 'ALL CHECKS PASSED' : 'FAILURES: ' + fail} (${pass} passed)`);
-// Let keep-alive sockets settle before exiting (Node/Win32 libuv teardown noise).
-setTimeout(() => process.exit(fail === 0 ? 0 : 1), 150);
+process.exitCode = fail === 0 ? 0 : 1;
+} finally { await localApp?.close(); }

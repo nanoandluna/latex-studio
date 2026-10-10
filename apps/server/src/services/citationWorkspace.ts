@@ -1,4 +1,5 @@
 import { projectIndexService } from './projectIndexService.js';
+import { assembleFromIndex } from './chapterAssembly.js';
 import { stripComments } from '@latex-studio/latex-parser';
 import type {
   CitationEntryView,
@@ -50,12 +51,15 @@ export async function buildCitationWorkspace(): Promise<CitationWorkspaceRespons
   }
 
   // cached contents only for the context line
-  const touchedFiles = [...new Set(index.citations.map((c) => c.file))];
-  const contents = new Map<string, string>();
-  for (const rel of touchedFiles) {
-    const text = await projectIndexService.getFileContent(rel);
-    if (text !== null) contents.set(rel, text);
-  }
+  const { assembly, contents } = await assembleFromIndex(index);
+  const reachable = new Set<string>();
+  const visit = (file: string) => {
+    if (reachable.has(file)) return;
+    reachable.add(file);
+    for (const edge of index.includes) if (edge.from === file) visit(edge.to);
+  };
+  if (index.mainFile) visit(index.mainFile);
+  const position = (file: string, line: number) => assembly?.posOf(file, line) ?? Number.MAX_SAFE_INTEGER;
 
   // per-file sorted section lists for the usage's chapter/section context
   const sectionsByFile = new Map<string, SectionEntry[]>();
@@ -78,31 +82,35 @@ export async function buildCitationWorkspace(): Promise<CitationWorkspaceRespons
     usages.set(c.key, list);
   }
   for (const list of usages.values()) {
-    list.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file)));
+    list.sort((a, b) => position(a.file, a.line) - position(b.file, b.line) || a.file.localeCompare(b.file) || a.line - b.line);
   }
 
   // bib metadata: first definition wins for display; the parser flags
   // duplicate keys on the surviving entry
-  const bibByKey = new Map<string, { author?: string; title?: string; year?: string; file: string; line: number }>();
+  const bibByKey = new Map<string, { author?: string; title?: string; year?: string; doi?: string; url?: string; file: string; line: number }>();
   const duplicateKeys = new Set<string>();
   for (const b of index.bibEntries) {
     if (b.duplicate) duplicateKeys.add(b.key);
     if (!bibByKey.has(b.key)) {
-      bibByKey.set(b.key, { author: b.author, title: b.title, year: b.year, file: b.file, line: b.line });
+      bibByKey.set(b.key, { author: b.author, title: b.title, year: b.year, doi: b.doi, url: b.url, file: b.file, line: b.line });
     }
   }
 
   const entries: CitationEntryView[] = [];
   for (const [key, list] of usages) {
     const bib = bibByKey.get(key);
-    const sortedSections = sectionsByFile.get(list[0].file);
     const first = list[0];
     const usageContext = (u: CitationUsage): CitationUsage => {
       const sorted = sectionsByFile.get(u.file);
+      const assembledSections = assembly && reachable.has(u.file)
+        ? assembly.sections.filter((s) => s.pos <= position(u.file, u.line)).map((s) => s.section) : null;
+      const preceding = (maxLevel: number) => assembledSections
+        ? [...assembledSections].reverse().find((s) => s.level <= maxLevel)?.title
+        : sorted ? nearestHeading(sorted, u.line, maxLevel)?.title : undefined;
       return {
         ...u,
-        section: sorted ? (nearestHeading(sorted, u.line, Number.MAX_SAFE_INTEGER)?.title ?? undefined) : undefined,
-        chapter: sorted ? (nearestHeading(sorted, u.line, chapterLevel)?.title ?? undefined) : undefined,
+        section: preceding(Number.MAX_SAFE_INTEGER),
+        chapter: preceding(chapterLevel),
       };
     };
     entries.push({
@@ -114,6 +122,8 @@ export async function buildCitationWorkspace(): Promise<CitationWorkspaceRespons
       author: bib?.author,
       title: bib?.title,
       year: bib?.year,
+      doi: bib?.doi,
+      url: bib?.url,
       bibFile: bib?.file,
       bibLine: bib?.line,
       firstUsage: usageContext(first),
@@ -134,6 +144,8 @@ export async function buildCitationWorkspace(): Promise<CitationWorkspaceRespons
       author: bib.author,
       title: bib.title,
       year: bib.year,
+      doi: bib.doi,
+      url: bib.url,
       bibFile: bib.file,
       bibLine: bib.line,
       firstUsage: null,
@@ -147,7 +159,7 @@ export async function buildCitationWorkspace(): Promise<CitationWorkspaceRespons
     if (undefinedKeyFirst(a) !== undefinedKeyFirst(b)) return undefinedKeyFirst(a) - undefinedKeyFirst(b);
     const fa = a.firstUsage;
     const fb = b.firstUsage;
-    if (fa && fb) return fa.file === fb.file ? fa.line - fb.line : fa.file.localeCompare(fb.file);
+    if (fa && fb) return position(fa.file, fa.line) - position(fb.file, fb.line) || fa.file.localeCompare(fb.file) || fa.line - fb.line;
     if (fa) return -1;
     if (fb) return 1;
     return a.key.localeCompare(b.key);

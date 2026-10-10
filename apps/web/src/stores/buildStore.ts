@@ -4,6 +4,7 @@ import { api, authedFetch } from '../api/client';
 import { useWorkspaceStore } from './workspaceStore';
 import { useSettingsStore } from './settingsStore';
 import { usePreviewStore } from './previewStore';
+import { useEditorStore } from './editorStore';
 
 export type BuildStatus =
   | 'idle'
@@ -68,11 +69,15 @@ export const useBuildStore = create<BuildState>()((set, get) => ({
     }
     set({ status: 'starting', startedAt: Date.now(), error: null });
     try {
+      await useEditorStore.getState().saveAll();
+      if (useWorkspaceStore.getState().path !== path) return;
       const rec: BuildRecord = await api.build(mainFile, compiler);
+      if (useWorkspaceStore.getState().path !== path) return;
       applyRecord(set, rec);
       // refresh log asynchronously
       api.buildLog(rec.buildId).then((r) => set({ log: r.log })).catch(() => {});
     } catch (err) {
+      if (useWorkspaceStore.getState().path !== path) return;
       const e = err as Error & { code?: string };
       set({
         status: e.code === 'COMPILER_NOT_FOUND' ? 'compiler_unavailable' : 'failed',

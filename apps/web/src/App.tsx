@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Header } from './components/layout/Header';
 import { Splitter } from './components/layout/Splitter';
 import { Sidebar } from './components/explorer/Sidebar';
-import { EditorPane } from './components/editor/EditorPane';
-import { PdfPreview } from './components/preview/PdfPreview';
+import { Welcome } from './components/dialogs/Welcome';
+import { useEditorStore } from './stores/editorStore';
 import { ProblemsPanel } from './components/problems/ProblemsPanel';
 import { CommandPalette } from './components/palette/CommandPalette';
 import { WorkspaceModal } from './components/dialogs/WorkspaceModal';
@@ -16,6 +16,10 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useBuildStore } from './stores/buildStore';
 import { useProjectIndexStore } from './stores/projectIndexStore';
 import { useSnapshotStore } from './stores/snapshotStore';
+import { api } from './api/client';
+
+const EditorPane = lazy(() => import('./components/editor/EditorPane').then((m) => ({ default: m.EditorPane })));
+const PdfPreview = lazy(() => import('./components/preview/PdfPreview').then((m) => ({ default: m.PdfPreview })));
 
 export default function App() {
   const workspacePath = useWorkspaceStore((s) => s.path);
@@ -38,6 +42,36 @@ export default function App() {
   useHotkeys();
   useAutoBuild();
   useAutoSave();
+  useEffect(() => {
+    if (!workspacePath) return;
+    let alive = true;
+    let checking = false;
+    const check = async () => {
+      if (!alive || checking || document.visibilityState === 'hidden') return;
+      checking = true;
+      try {
+        const revision = await api.indexRevision();
+        if (alive && revision.root === workspacePath && revision.version !== useProjectIndexStore.getState().version) {
+          await useProjectIndexStore.getState().refresh();
+          if (!alive) return;
+          await useWorkspaceStore.getState().refreshTree();
+          if (alive) await useEditorStore.getState().reloadCleanTabs();
+        }
+      } catch { /* the next probe retries after a server restart */ }
+      finally { checking = false; }
+    };
+    const timer = window.setInterval(() => void check(), 2000);
+    window.addEventListener('focus', check);
+    return () => { alive = false; window.clearInterval(timer); window.removeEventListener('focus', check); };
+  }, [workspacePath]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      const state = useEditorStore.getState();
+      if (state.tabs.some(state.isDirty) || state.saving > 0) { event.preventDefault(); event.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
 
   // Theme class on <html>
   useEffect(() => {
@@ -73,7 +107,7 @@ export default function App() {
       {workspacePath && building && <div className="build-progress shrink-0" aria-hidden />}
 
       {!workspacePath ? (
-        <EmptyState />
+        <Welcome />
       ) : (
         <>
           <div className="flex min-h-0 flex-1">
@@ -87,14 +121,14 @@ export default function App() {
             )}
 
             <main className="min-w-0 flex-1">
-              <EditorPane />
+              <Suspense fallback={<div className="p-4 text-sm text-zinc-500">Loading editor…</div>}><EditorPane key={workspacePath} /></Suspense>
             </main>
 
             {previewVisible && (
               <>
                 <Splitter orientation="vertical" onResize={(d) => setPreviewWidth((w) => Math.min(window.innerWidth - 400, Math.max(280, w - d)))} />
                 <aside className="shrink-0 overflow-hidden" style={{ width: previewWidth }}>
-                  <PdfPreview />
+                  <Suspense fallback={<div className="p-4 text-sm text-zinc-500">Loading preview…</div>}><PdfPreview /></Suspense>
                 </aside>
               </>
             )}
@@ -119,28 +153,6 @@ export default function App() {
 
       <CommandPalette />
       <WorkspaceModal />
-    </div>
-  );
-}
-
-function EmptyState() {
-  const openModal = useUiStore((s) => s.setWorkspaceModalOpen);
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-      <div className="text-5xl font-bold tracking-tight">
-        <span className="text-blue-600 dark:text-blue-400">TeX</span> Studio
-      </div>
-      <p className="max-w-md text-sm text-zinc-500">
-        A lightweight local LaTeX workspace. Open a folder containing .tex files to start editing,
-        compiling and previewing — entirely offline.
-      </p>
-      <button
-        onClick={() => openModal(true)}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
-      >
-        Open Workspace…
-      </button>
-      <p className="text-xs text-zinc-400">Tip: press Ctrl+Shift+P for the command palette</p>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * LaTeX Studio V0.1.0 Release Gate.
+ * LaTeX Studio release gate: built artifacts, tests, production auth and audit.
  *
  * Usage: pnpm release:check
  *
@@ -38,21 +38,22 @@ const step = (name, ok) => {
 
 // `pnpm doctor` resolves to pnpm's builtin doctor, not the project script.
 step('Doctor', run('Doctor', 'pnpm', ['run', 'doctor']));
+step('Build', run('Build', 'pnpm', ['build']));
 step('Typecheck', run('Typecheck', 'pnpm', ['-r', 'typecheck']));
-step('Unit/Integration', run('Tests (unit/integration)', 'pnpm', ['-r', 'test']));
+step('Unit/Integration', run('Tests (unit/integration)', 'pnpm', ['-r', 'test'], { LS_STRESS: '1' }));
+step('Security', run('Production security smoke', 'node', ['scripts/security-smoke.mjs'], { SECURITY_SELF_HOST: '1' }));
+step('Dependency audit', run('Dependency audit', 'pnpm', ['audit', '--audit-level=moderate', '--registry=https://registry.npmjs.org']));
 step(
   'Real LaTeX',
   run(
     'Real LaTeX tests',
     'node',
-    ['scripts/run-with-env.mjs', 'RUN_LATEX_TESTS=1', '--', 'pnpm', '--filter', '@latex-studio/server', 'test'],
+    ['scripts/run-with-env.mjs', 'RUN_LATEX_TESTS=1', '--', 'pnpm', '--filter', '@latex-studio/server', 'exec', 'vitest', 'run', 'test/real-latex.test.ts'],
     { RUN_LATEX_TESTS: '1' }
   )
 );
 // test:e2e:latex builds web + server first, otherwise Playwright serves a stale dist.
-step('Real E2E', run('Real E2E', 'pnpm', ['run', 'test:e2e:latex'], { E2E_HAS_LATEX: '1' }));
-step('Web Build', run('Web Build', 'pnpm', ['--filter', '@latex-studio/web', 'build']));
-step('Server Build', run('Server Build', 'pnpm', ['--filter', '@latex-studio/server', 'build']));
+step('Real E2E', run('Real E2E', 'pnpm', ['exec', 'playwright', 'test', '-c', 'tests/playwright.config.ts'], { E2E_HAS_LATEX: '1' }));
 
 const width = Math.max(...results.map(([n]) => n.length));
 console.log('\n────────────────────────────');

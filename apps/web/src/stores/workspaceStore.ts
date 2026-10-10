@@ -18,7 +18,6 @@ import { useUiStore } from './uiStore';
 function resetWorkspaceScopedState(): void {
   useBuildStore.getState().reset();
   usePreviewStore.getState().setPdf(null);
-  useEditorStore.setState({ tabs: [], activePath: null, revealTarget: null, cursorLine: {} });
   useProjectIndexStore.getState().reset();
   useSnapshotStore.getState().reset();
   useStatisticsStore.getState().reset();
@@ -60,7 +59,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const state = await api.workspaceState();
           if (state.open) {
             set({ path: state.path, name: state.name, mainFile: state.mainFile });
+            await useEditorStore.getState().activateWorkspace(state.path);
             await get().refreshTree();
+          } else {
+            set({ path: null, name: null, mainFile: null, tree: null });
+            await useEditorStore.getState().activateWorkspace(null);
           }
         } catch {
           /* server not ready yet */
@@ -74,6 +77,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           // Reset all workspace-scoped state so nothing leaks across projects
           resetWorkspaceScopedState();
           set({ path: opened.path, name: opened.name, mainFile: opened.mainFile });
+          await useEditorStore.getState().activateWorkspace(opened.path);
           await get().refreshTree();
           // seed the status bar's snapshot age for the new workspace
           void useSnapshotStore.getState().refresh().catch(() => {});
@@ -88,6 +92,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       closeWorkspace: async () => {
         await api.closeWorkspace();
         resetWorkspaceScopedState();
+        await useEditorStore.getState().activateWorkspace(null);
         set({ path: null, name: null, mainFile: null, tree: null });
       },
 
