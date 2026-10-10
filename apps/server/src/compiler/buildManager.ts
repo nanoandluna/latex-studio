@@ -215,7 +215,7 @@ export class BuildManager {
     const collector = new LogCollector();
     for (const step of result.steps) {
       collector.addLine(
-        `[${new Date().toISOString().slice(11, 19)}] ${step.tool} ${step.ok ? '✓' : '✕'} (${(step.durationMs / 1000).toFixed(2)}s)`
+        `${step.tool} ${step.ok ? '✓' : '✕'} (${(step.durationMs / 1000).toFixed(2)}s)`
       );
       if (!step.ok) {
         collector.addLine(`  command : ${step.command} ${step.args.join(' ')}`);

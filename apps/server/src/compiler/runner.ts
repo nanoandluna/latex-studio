@@ -2,7 +2,6 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { ProcessManager, type SpawnOutcome } from './processManager.js';
 import { ArtifactManager } from './artifactManager.js';
-import { BUILD_DIR_NAME } from './config.js';
 import { safeResolve, safeRealpathForWrite } from '../utils/paths.js';
 
 export interface RunStep {
@@ -293,13 +292,17 @@ export class CompilerRunner {
       return { ran: true, skipped: false, ok: res.success, run: res };
     }
     if (cfg.usesBibtex && cfg.bibtexCmd) {
-      // Run from the workspace root so \bibliography{refs} resolves relative
-      // to the project, while aux/bbl live in the isolated build dir.
+      // TeX Live's default openout_any=p refuses ".build/main.blg" when
+      // invoked from the workspace. Run inside the build directory, keeping
+      // the project bibliography/style roots in the child's search paths.
       const res = await this.runTool(
         cfg.bibtexCmd,
-        [`${BUILD_DIR_NAME}/${jobname}`],
-        workspace,
-        opts
+        [jobname],
+        buildDir,
+        { ...opts, env: {
+          BIBINPUTS: [workspace, process.env.BIBINPUTS ?? ''].join(path.delimiter),
+          BSTINPUTS: [workspace, process.env.BSTINPUTS ?? ''].join(path.delimiter),
+        } }
       );
       return { ran: true, skipped: false, ok: res.success, run: res };
     }
@@ -314,13 +317,14 @@ export class CompilerRunner {
     command: string,
     args: string[],
     cwd: string,
-    opts: { timeoutMs: number; cancelled?: () => boolean }
+    opts: { timeoutMs: number; cancelled?: () => boolean; env?: NodeJS.ProcessEnv }
   ): Promise<RunResult> {
     const started = Date.now();
     const outcome: SpawnOutcome = await this.processes.run(command, args, {
       cwd,
       timeoutMs: opts.timeoutMs,
       cancelled: opts.cancelled,
+      env: opts.env,
     });
     return {
       success: !outcome.spawnError && outcome.code === 0,

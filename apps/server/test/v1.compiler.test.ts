@@ -31,6 +31,10 @@ it('runs both post-BibTeX passes even when the log has no rerun warning', async 
   const result = await run();
   expect(result.success).toBe(true);
   expect(process.mock.calls.map(([command]) => command)).toEqual(['xelatex', 'bibtex', 'xelatex', 'xelatex']);
+  expect(process.mock.calls[1][1]).toEqual(['main']);
+  expect(process.mock.calls[1][2].cwd).toBe(buildDir);
+  expect(process.mock.calls[1][2].env?.BIBINPUTS).toBe([root, globalThis.process.env.BIBINPUTS ?? ''].join(path.delimiter));
+  expect(process.mock.calls[1][2].env?.BSTINPUTS).toBe([root, globalThis.process.env.BSTINPUTS ?? ''].join(path.delimiter));
   expect(result.steps.map((step) => step.tool)).toEqual(['xelatex', 'bibtex', 'xelatex', 'xelatex']);
 });
 

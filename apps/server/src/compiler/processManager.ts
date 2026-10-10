@@ -28,7 +28,7 @@ export class ProcessManager {
   async run(
     command: string,
     args: string[],
-    opts: { cwd: string; timeoutMs?: number; cancelled?: () => boolean }
+    opts: { cwd: string; timeoutMs?: number; cancelled?: () => boolean; env?: NodeJS.ProcessEnv }
   ): Promise<SpawnOutcome> {
     return new Promise<SpawnOutcome>((resolve) => {
       let settled = false;
@@ -50,7 +50,7 @@ export class ProcessManager {
           cwd: opts.cwd,
           shell: false,
           windowsHide: true,
-          env: { ...process.env, PATH: helperPath },
+          env: { ...process.env, ...opts.env, PATH: helperPath },
           detached: process.platform !== 'win32',
         });
       } catch (err) {
