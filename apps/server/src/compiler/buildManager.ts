@@ -221,6 +221,7 @@ export class BuildManager {
         collector.addLine(`  command : ${step.command} ${step.args.join(' ')}`);
         collector.addLine(`  cwd     : ${step.cwd}`);
         collector.addLine(`  exit    : ${step.exitCode ?? 'n/a'}`);
+        if (step.stdoutTail.trim()) collector.addStdout(step.stdoutTail.trim().slice(-4000));
         if (step.stderrTail.trim()) collector.addLine(`  stderr  : ${step.stderrTail.trim().slice(-1500)}`);
       }
     }
@@ -239,7 +240,10 @@ export class BuildManager {
       record.errorMessage = `Failed to start '${record.compiler}': ${result.spawnError.message}`;
     } else {
       record.status = result.success ? 'success' : 'failed';
-      if (!result.success) record.errorCode = 'BUILD_FAILED';
+      if (!result.success) {
+        record.errorCode = 'BUILD_FAILED';
+        record.errorMessage = result.failureMessage;
+      }
     }
   }
 

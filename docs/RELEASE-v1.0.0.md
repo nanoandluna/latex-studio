@@ -18,6 +18,7 @@ V1.0 completes the everyday path from writing and bibliography updates to PDF re
 - Zotero / Better BibTeX exports refresh in the UI when the bibliography changes. No Zotero account or database access is required.
 - Citation usages follow assembled include order and inherit chapters across `\input` files.
 - A welcome screen explains the core workflow and checks the local TeX environment.
+- Nested `\\include` outputs work with TeX Live as well as MiKTeX. Direct compilation performs both post-bibliography passes; bibliography failures and cancellation are preserved in the build result and tool log.
 
 ## Distribution and maintenance
 
@@ -35,4 +36,4 @@ Browser recovery depends on the current browser profile, origin and available lo
 
 ## Verification
 
-The full release gate passed on Windows on 2026-10-10: build and type checks, 224 unit/integration checks, 9 production authentication checks, 18 real LaTeX compilation checks, and 42 browser checks. Two browser scenarios reserved for runs without TeX were skipped in this real-TeX gate. The real compilation suite covers XeLaTeX, pdfLaTeX, LuaLaTeX, BibTeX, Biber, Chinese text, Unicode paths and SyncTeX. The dependency audit reported no known vulnerabilities.
+The full release gate passed on Windows on 2026-10-10: build and type checks, 228 unit/integration checks, 9 production authentication checks, 18 real LaTeX compilation checks, and 42 browser checks. Two browser scenarios reserved for runs without TeX were skipped in this real-TeX gate. The real compilation suite covers XeLaTeX, pdfLaTeX, LuaLaTeX, BibTeX, Biber, Chinese text, Unicode paths and SyncTeX. The dependency audit reported no known vulnerabilities.

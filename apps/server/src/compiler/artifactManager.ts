@@ -29,7 +29,8 @@ export class LogCollector {
 
   /** Combined raw output, bounded. */
   combined(): string {
-    const both = `${this.stdout}\n${this.stderr}`.trim();
+    const entries = this.entries.map((entry) => `[${new Date(entry.time).toISOString().slice(11, 19)}] ${entry.line}`).join('\n');
+    const both = `${entries}\n${this.stdout}\n${this.stderr}`.trim();
     return both.length > 400_000 ? both.slice(-400_000) : both;
   }
 

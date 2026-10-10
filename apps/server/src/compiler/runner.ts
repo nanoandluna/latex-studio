@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { ProcessManager, type SpawnOutcome } from './processManager.js';
 import { ArtifactManager } from './artifactManager.js';
 import { BUILD_DIR_NAME } from './config.js';
+import { safeResolve, safeRealpathForWrite } from '../utils/paths.js';
 
 export interface RunStep {
   tool: string;
@@ -21,6 +22,7 @@ export interface RunResult {
   cancelled: boolean;
   timedOut: boolean;
   spawnError?: Error;
+  failureMessage?: string;
   steps: RunStep[];
 }
 
@@ -81,6 +83,23 @@ export async function collectSources(workspace: string, mainFile: string): Promi
   return out.join('\n');
 }
 
+/** TeX Live does not create output parents for nested include auxiliary files. */
+export async function prepareIncludeDirectories(workspace: string, buildDir: string, source: string): Promise<void> {
+  const includes = source.replace(/(?<!\\)%[^\n]*/g, '').matchAll(/\\include\s*\{([^}]+)\}/g);
+  const directories = new Set<string>();
+  for (const match of includes) {
+    const name = match[1].trim().replace(/\\/g, '/');
+    if (name.split('/').includes('..') || path.isAbsolute(name) || name.includes(':')) continue;
+    const parent = path.posix.dirname(name);
+    if (parent !== '.') directories.add(safeResolve(buildDir, parent));
+  }
+  for (const directory of directories) {
+    await safeRealpathForWrite(workspace, directory);
+    await fs.mkdir(directory, { recursive: true });
+    await safeRealpathForWrite(workspace, directory);
+  }
+}
+
 /**
  * Executes the actual compiler invocations.
  *
@@ -109,6 +128,7 @@ export class CompilerRunner {
     latexmkCommand: string,
     opts: { timeoutMs: number; cancelled?: () => boolean }
   ): Promise<RunResult> {
+    await prepareIncludeDirectories(workspace, buildDir, await collectSources(workspace, mainFile));
     const args = [
       `-${engine}`,
       '-interaction=nonstopmode',
@@ -140,6 +160,7 @@ export class CompilerRunner {
     }
     const usesBiber = /\\addbibresource\s*\[?[^\]]*\]?\{/.test(mainSource);
     const usesBibtex = /\\(?:no)?bibliography\s*\{/.test(mainSource);
+    await prepareIncludeDirectories(workspace, buildDir, mainSource);
 
     const deadline = Date.now() + opts.timeoutMs;
     const remaining = () => Math.max(1000, deadline - Date.now());
@@ -148,6 +169,7 @@ export class CompilerRunner {
     let pass = 0;
     let lastLog = '';
     let engineFailed = false;
+    let minimumPasses = 1;
     while (pass < MAX_ENGINE_PASSES) {
       if (opts.cancelled?.()) {
         result.cancelled = true;
@@ -208,13 +230,28 @@ export class CompilerRunner {
           { usesBiber, usesBibtex, bibtexCmd: tools.bibtex, biberCmd: tools.biber },
           { timeoutMs: Math.min(remaining(), 60_000), cancelled: opts.cancelled }
         );
-        if (!bibRun.ok && !bibRun.skipped) {
-          // Bib tool failure is not fatal — the LaTeX warnings will surface it.
-          lastLog = `${lastLog}\n${bibRun.stderr ?? ''}`;
+        if (bibRun.run) {
+          result.steps.push(...bibRun.run.steps);
+          result.cancelled = bibRun.run.cancelled;
+          result.timedOut = bibRun.run.timedOut;
+          result.spawnError = bibRun.run.spawnError;
+          if (result.cancelled || result.timedOut || result.spawnError) return result;
         }
-        if (bibRun.ran) continue; // force at least one more pass to resolve citations
+        if (!bibRun.ok && !bibRun.skipped) {
+          engineFailed = true;
+          result.failureMessage = bibRun.message ?? 'The bibliography tool failed. See its output in the build log.';
+          break;
+        }
+        if (bibRun.ran) {
+          // The first post-bibliography pass writes citation mappings to aux;
+          // the following pass consumes them. TeX distributions differ in which
+          // rerun warnings they print, so do not rely on the warning wording.
+          minimumPasses = 3;
+          continue;
+        }
       }
 
+      if (pass < minimumPasses) continue;
       if (!RERUN_PATTERNS.some((p) => lastLog.includes(p))) break;
     }
 
@@ -245,7 +282,7 @@ export class CompilerRunner {
     jobname: string,
     cfg: { usesBiber: boolean; usesBibtex: boolean; bibtexCmd?: string; biberCmd?: string },
     opts: { timeoutMs: number; cancelled?: () => boolean }
-  ): Promise<{ ran: boolean; skipped: boolean; ok: boolean; stderr?: string }> {
+  ): Promise<{ ran: boolean; skipped: boolean; ok: boolean; run?: RunResult; message?: string }> {
     if (cfg.usesBiber && cfg.biberCmd) {
       const res = await this.runTool(
         cfg.biberCmd,
@@ -253,7 +290,7 @@ export class CompilerRunner {
         workspace,
         opts
       );
-      return { ran: true, skipped: false, ok: res.success };
+      return { ran: true, skipped: false, ok: res.success, run: res };
     }
     if (cfg.usesBibtex && cfg.bibtexCmd) {
       // Run from the workspace root so \bibliography{refs} resolves relative
@@ -264,8 +301,12 @@ export class CompilerRunner {
         workspace,
         opts
       );
-      return { ran: true, skipped: false, ok: res.success };
+      return { ran: true, skipped: false, ok: res.success, run: res };
     }
+    if (cfg.usesBiber || cfg.usesBibtex) return {
+      ran: false, skipped: false, ok: false,
+      message: `${cfg.usesBiber ? 'Biber' : 'BibTeX'} is required by this document but is not available. Install it and check the TeX environment.`,
+    };
     return { ran: false, skipped: true, ok: true };
   }
 
