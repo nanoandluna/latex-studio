@@ -9,7 +9,7 @@ V1.0 completes the everyday path from writing and bibliography updates to PDF re
 - Atomic file publication avoids truncating the original file on a failed write. Optimistic disk checks reject stale editor buffers.
 - A disk-conflict diff offers explicit choices to keep editing, use disk contents, or save the reviewed draft.
 - Build saves every dirty tab first; a save failure prevents compiling an outdated paper.
-- Snapshot restores validate manifests, file sizes and SHA-256 hashes before writes, and can recreate deleted files and parent folders. Extra sources are removed only after successful publication of every restored file.
+- Snapshot restores validate manifests, file sizes and SHA-256 hashes before writes, and can recreate deleted files and parent folders. Matching files retain their timestamps without redundant writes. Extra sources are removed only after successful publication of every restored file.
 - Text reads and mutations validate real filesystem paths, including ancestor junctions. Normalized root deletion and destination-overwriting renames are rejected.
 
 ## Research workflow
@@ -24,6 +24,7 @@ V1.0 completes the everyday path from writing and bibliography updates to PDF re
 - Lazy editor and PDF loading, a bundled offline Monaco worker, and removal of unused language bundles and obsolete code.
 - Patched runtime and test dependencies, with a dependency audit in the release gate.
 - Cross-platform CI, strict real-LaTeX release verification, browser regression tests, and production authentication smoke checks.
+- Cross-platform source monitoring handles directory deletion, ignores symlink targets and releases its handles when the server closes.
 - A source-and-prebuilt ZIP, SHA-256 checksum, Windows/POSIX launchers, and Chinese quick-start/upgrade documentation.
 
 ## Requirements and scope
@@ -34,4 +35,4 @@ Browser recovery depends on the current browser profile, origin and available lo
 
 ## Verification
 
-The full release gate passed on Windows on 2026-10-10: build and type checks, 220 unit/integration checks, 9 production authentication checks, 18 real LaTeX compilation checks, and 42 browser checks. Two browser scenarios reserved for runs without TeX were skipped in this real-TeX gate. The real compilation suite covers XeLaTeX, pdfLaTeX, LuaLaTeX, BibTeX, Biber, Chinese text, Unicode paths and SyncTeX. The dependency audit reported no known vulnerabilities.
+The full release gate passed on Windows on 2026-10-10: build and type checks, 224 unit/integration checks, 9 production authentication checks, 18 real LaTeX compilation checks, and 42 browser checks. Two browser scenarios reserved for runs without TeX were skipped in this real-TeX gate. The real compilation suite covers XeLaTeX, pdfLaTeX, LuaLaTeX, BibTeX, Biber, Chinese text, Unicode paths and SyncTeX. The dependency audit reported no known vulnerabilities.

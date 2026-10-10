@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import { watch, type FSWatcher } from 'chokidar';
 import path from 'node:path';
 
 /**
@@ -42,11 +42,11 @@ export function isIgnoredWorkspacePath(relPosix: string): boolean {
 }
 
 export class FileWatcher {
-  private watcher: fs.FSWatcher | null = null;
+  private watcher: FSWatcher | null = null;
+  private closing = new Set<Promise<void>>();
   private root: string | null = null;
   private pending = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private startedAt = 0;
   /**
    * Suspension depth for bulk writes (snapshot / restore / replace / import).
    *
@@ -72,21 +72,14 @@ export class FileWatcher {
   suspend(): void {
     this.suspendDepth++;
     if (this.suspendDepth === 1 && this.watcher) {
-      this.watcher.close();
-      this.watcher = null;
+      this.closeHandle();
     }
   }
 
   resume(): void {
     this.suspendDepth = Math.max(0, this.suspendDepth - 1);
     if (this.suspendDepth === 0 && this.root && !this.watcher) {
-      try {
-        this.watcher = fs.watch(this.root, { recursive: true }, (_event, name) => {
-          this.onFsEvent(name);
-        });
-      } catch {
-        this.watcher = null;
-      }
+      this.openHandle(this.root);
     }
   }
 
@@ -96,35 +89,65 @@ export class FileWatcher {
 
   start(root: string): void {
     if (this.root === root && this.active) return; // idempotent restart guard
-    this.stop();
+    void this.stop();
     this.root = root;
-    this.startedAt = Date.now();
+    this.openHandle(root);
+  }
+
+  private openHandle(root: string): void {
     try {
-      this.watcher = fs.watch(root, { recursive: true }, (_event, name) => {
-        this.onFsEvent(name);
+      const handle = watch(root, {
+        ignoreInitial: true,
+        followSymlinks: false,
+        atomic: true,
+        ignored: (absolute) => {
+          const rel = path.relative(root, absolute).replace(/\\/g, '/');
+          return rel !== '' && isIgnoredWorkspacePath(rel);
+        },
+      });
+      this.watcher = handle;
+      handle.on('all', (_event, absolute) => {
+        if (this.watcher !== handle) return;
+        this.onFsEvent(path.relative(root, absolute).replace(/\\/g, '/'));
+      });
+      // Refresh once attached: edits made while the initial scan was attaching
+      // must not be lost. No fixed attach-storm delay drops early user changes.
+      handle.on('ready', () => {
+        if (this.watcher === handle) this.onFsEvent('.');
+      });
+      handle.on('error', (error) => {
+        if (process.env.LS_DEBUG) console.error('[watcher]', error);
       });
     } catch {
       this.watcher = null;
     }
   }
 
-  stop(): void {
-    this.watcher?.close();
+  private closeHandle(): void {
+    const handle = this.watcher;
     this.watcher = null;
+    if (!handle) return;
+    const closed = handle.close().catch(() => {}).finally(() => this.closing.delete(closed));
+    this.closing.add(closed);
+  }
+
+  async stop(): Promise<void> {
+    this.closeHandle();
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.pending.clear();
     this.root = null;
+    this.suspendDepth = 0;
+    await Promise.all(this.closing);
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.onChange = null;
-    this.stop();
+    await this.stop();
   }
 
   private onFsEvent(name: string | Buffer | null): void {
     if (this.suspended) return;
-    if (Date.now() - this.startedAt < 300) return; // attach storm guard
     if (!name) return;
     const rel = name.toString().replace(/\\/g, '/');
     if (isIgnoredWorkspacePath(rel)) return;

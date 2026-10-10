@@ -234,7 +234,15 @@ export class SnapshotService {
         if (wanted && !wanted.has(f.path)) continue;
         try {
           const abs = safeResolve(root, f.path);
-          await atomicWrite(root, abs, contents.get(f.path)!);
+          await safeRealpathForWrite(root, abs);
+          const content = contents.get(f.path)!;
+          const current = await fsp.readFile(abs).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === 'ENOENT') return null;
+            throw error;
+          });
+          // Already matching files need no publication: preserve their mtime
+          // and avoid hundreds of unnecessary fsyncs in large projects.
+          if (!current?.equals(content)) await atomicWrite(root, abs, content);
           restoredFiles++;
         } catch {
           failed.push(f.path);

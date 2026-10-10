@@ -16,6 +16,7 @@
     "@fastify/static": "^10.1.6",
     "@latex-studio/latex-parser": "workspace:*",
     "@latex-studio/shared": "workspace:*",
+    "chokidar": "5.0.0",
     "fastify": "^5.12.5",
     "jszip": "^3.10.1"
   },

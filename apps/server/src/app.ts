@@ -22,6 +22,7 @@ import { registerEnvRoutes } from './routes/env.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { registerFileRoutes } from './routes/files.js';
 import { registerBuildRoutes } from './routes/build.js';
+import { projectIndexService } from './services/projectIndexService.js';
 
 /** Origins allowed to read API responses cross-origin (dev server only). */
 const DEV_ORIGINS = new Set([
@@ -37,6 +38,9 @@ export async function createApp() {
 
   const isTest = process.env.NODE_ENV === 'test';
   const instanceToken = createInstanceToken();
+  app.addHook('onClose', async () => {
+    await projectIndexService.disableAutoRefresh();
+  });
 
   // CORS: never reflect arbitrary origins.
   //  - no Origin header (curl / same-origin fetch) → no ACAO needed

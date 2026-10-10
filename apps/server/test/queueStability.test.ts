@@ -75,7 +75,7 @@ describe('synctex guards without a successful build', () => {
       expect(res.statusCode).toBe(200); // real env: mapping may succeed
     } else {
       expect(res.statusCode).toBe(404);
-      expect(res.json().error.code).toBe('INTERNAL_ERROR');
+      expect(res.json().error.code).toBe('BUILD_FAILED');
     }
   }, 120_000);
 

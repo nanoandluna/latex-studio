@@ -69,6 +69,16 @@ describe('V1 save integrity', () => {
 });
 
 describe('V1 snapshot recovery', () => {
+  it('does not rewrite files that already match the verified snapshot', async () => {
+    await fs.writeFile(path.join(root, 'stable.tex'), 'unchanged source');
+    const snapshot = (await post('/api/workspace/snapshots', { reason: 'manual' })).json();
+    const timestamp = new Date('2020-01-01T00:00:00Z');
+    await fs.utimes(path.join(root, 'stable.tex'), timestamp, timestamp);
+    const res = await post(`/api/workspace/snapshots/${snapshot.snapshotId}/restore`, { files: ['stable.tex'] });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().failed).toEqual([]);
+    expect((await fs.stat(path.join(root, 'stable.tex'))).mtimeMs).toBe(timestamp.getTime());
+  });
   it('replaces an unchanged but corrupted snapshot with a healthy capture', async () => {
     await fs.writeFile(path.join(root, 'draft.tex'), 'identical source');
     const snapshot = (await post('/api/workspace/snapshots', { reason: 'manual' })).json();

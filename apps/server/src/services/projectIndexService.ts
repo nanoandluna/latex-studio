@@ -104,8 +104,8 @@ export class ProjectIndexService {
     this.watcher.start(root);
   }
 
-  disableAutoRefresh(): void {
-    this.watcher.stop();
+  async disableAutoRefresh(): Promise<void> {
+    await this.watcher.stop();
   }
 
   /**

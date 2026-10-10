@@ -22,7 +22,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
   });
 
   app.post('/api/workspace/close', async () => {
-    projectIndexService.disableAutoRefresh();
+    await projectIndexService.disableAutoRefresh();
     await workspaceService.close();
     return { ok: true };
   });
