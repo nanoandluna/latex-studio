@@ -18,7 +18,7 @@ V1.0 completes the everyday path from writing and bibliography updates to PDF re
 - Zotero / Better BibTeX exports refresh in the UI when the bibliography changes. No Zotero account or database access is required.
 - Citation usages follow assembled include order and inherit chapters across `\input` files.
 - A welcome screen explains the core workflow and checks the local TeX environment.
-- Nested `\\include` outputs work with TeX Live as well as MiKTeX. Direct compilation performs both post-bibliography passes; bibliography failures and cancellation are preserved in the build result and tool log.
+- Nested `\include` outputs work with TeX Live as well as MiKTeX. Direct compilation performs both post-bibliography passes; bibliography failures and cancellation are preserved in the build result and tool log.
 
 ## Distribution and maintenance
 
